@@ -1,4 +1,4 @@
-![MySQL Studio Web](assets/banner.png)
+![MySQL Studio Web](./public/assets/banner.png)
 
 # MySQL Studio Web — Free Local Web MySQL Client
 
