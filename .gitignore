@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Local runtime data (passwords, SQL, exports)
+data/config/client_config.db
+data/config/client_config.db-*
+data/scripts/*
+!data/scripts/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+!data/exports/README.md
+client_config.db
+client_config.db-*
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+*secret*.json
+*secrets*.yml
+*secrets*.yaml
+.npmrc
+**/github_token*
+**/ghp_*
+**/gho_*
+**/ghu_*
+**/ghs_*
+**/ghr_*
+
+# Local-only agent / planning docs (never publish)
+do_not_commit/
+.cursorrules
+.cursor/
+AGENTS.md
+CLAUDE.md
+
+# OS / editor / logs
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+.vscode/settings.json
+.idea/

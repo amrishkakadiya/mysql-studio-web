@@ -1,0 +1,24 @@
+{
+  "name": "mysql-studio-web",
+  "version": "1.0.0",
+  "description": "MySQL Studio Web — lightweight local web MySQL studio",
+  "main": "server.js",
+  "scripts": {
+    "start": "sh serve.sh",
+    "serve": "sh serve.sh",
+    "setup-hosts": "sh serve.sh --setup-hosts",
+    "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/css/app.css --minify"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2",
+    "mysql2": "^3.12.0"
+  },
+  "private": true
+}

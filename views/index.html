@@ -1,0 +1,3055 @@
+<!doctype html>
+<html lang="en" class="h-full dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MySQL Studio Web</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("mysqlClient.uiTheme") || "dark";
+          var dark = t !== "light";
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.classList.toggle("light", !dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (_) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="/css/app.css" />
+    <!-- CodeMirror 5 (CDN) for the SQL editor — no build step -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/sql-hint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.8.2/sql-formatter.min.js"></script>
+    <!-- Web fonts used by Settings → Font family options -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Roboto:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root,
+      html.dark {
+        --surface-900: 15 20 25;
+        --surface-800: 26 35 50;
+        --surface-700: 36 48 68;
+        --surface-600: 45 60 82;
+        --ui-font-family: ui-sans-serif, system-ui, sans-serif;
+        --ui-font-size: 14px;
+        --editor-font-family:
+          ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --editor-font-size: 13px;
+      }
+      html.light {
+        --surface-900: 241 245 249;
+        --surface-800: 255 255 255;
+        --surface-700: 226 232 240;
+        --surface-600: 203 213 225;
+      }
+
+      /* Root rem size scales Tailwind text-* utilities; body carries UI family. */
+      html {
+        font-size: var(--ui-font-size);
+      }
+      body {
+        font-family: var(--ui-font-family) !important;
+        font-size: 1rem;
+      }
+
+      .CodeMirror {
+        height: 100%;
+        font-family: var(--editor-font-family) !important;
+        font-size: var(--editor-font-size) !important;
+      }
+      /* Data/result mono cells follow the editor font choice */
+      .font-mono {
+        font-family: var(--editor-font-family) !important;
+      }
+      html.dark .CodeMirror {
+        background: #0f1419;
+      }
+      html.dark .CodeMirror-gutters {
+        background: #131a24;
+        border-right: 1px solid #243044;
+      }
+      html.light .CodeMirror {
+        background: #ffffff;
+        color: #0f172a;
+      }
+      html.light .CodeMirror-gutters {
+        background: #f1f5f9;
+        border-right: 1px solid #e2e8f0;
+      }
+      html.light .CodeMirror-cursor {
+        border-left-color: #0f172a;
+      }
+
+      /* Remap common dark-first text utilities for light mode */
+      html.light .text-white {
+        color: #0f172a;
+      }
+      html.light .text-slate-100 {
+        color: #0f172a;
+      }
+      html.light .text-slate-200 {
+        color: #1e293b;
+      }
+      html.light .text-slate-300 {
+        color: #334155;
+      }
+      html.light .text-slate-400 {
+        color: #64748b;
+      }
+      html.light .text-slate-500 {
+        color: #64748b;
+      }
+      html.light .text-slate-600 {
+        color: #94a3b8;
+      }
+      html.light .placeholder\:text-slate-500::placeholder {
+        color: #94a3b8;
+      }
+      html.light .bg-black\/60 {
+        background-color: rgb(15 23 42 / 0.45);
+      }
+      html.light .bg-surface-950\/60,
+      html.light .bg-surface-900\/50,
+      html.light .bg-surface-900\/40 {
+        background-color: rgb(248 250 252 / 0.95);
+      }
+      /* Keep readable contrast on solid accent buttons / badges */
+      html.light .bg-sky-600,
+      html.light .bg-sky-500,
+      html.light .bg-emerald-600,
+      html.light .bg-emerald-500,
+      html.light .bg-emerald-700,
+      html.light .bg-rose-600,
+      html.light .bg-rose-500,
+      html.light .bg-rose-700,
+      html.light .bg-amber-700,
+      html.light .bg-sky-700 {
+        color: #fff !important;
+      }
+      html.light .bg-sky-600 .text-white,
+      html.light .bg-emerald-600 .text-white,
+      html.light .bg-rose-600 .text-white {
+        color: #fff !important;
+      }
+
+      html.light {
+        scrollbar-color: #94a3b8 transparent;
+      }
+      html.light ::-webkit-scrollbar-track {
+        background: rgba(241, 245, 249, 0.9);
+      }
+      html.light ::-webkit-scrollbar-thumb {
+        background: #94a3b8;
+      }
+      html.light ::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
+      }
+
+      /* SQL autocomplete popup */
+      .CodeMirror-hints {
+        z-index: 70;
+        max-height: 16rem;
+        border: 1px solid #2d3c52;
+        background: #1a2332;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+      }
+      .CodeMirror-hint {
+        color: #e2e8f0;
+        font-family: var(--editor-font-family) !important;
+        font-size: var(--editor-font-size) !important;
+      }
+      li.CodeMirror-hint-active {
+        background: #0369a1;
+        color: #fff;
+      }
+      html.light .CodeMirror-hints {
+        border-color: #cbd5e1;
+        background: #ffffff;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+      }
+      html.light .CodeMirror-hint {
+        color: #0f172a;
+      }
+      html.light li.CodeMirror-hint-active {
+        background: #0284c7;
+        color: #fff;
+      }
+
+      /* Editor / results drag handle (session-only; not persisted) */
+      .sql-split-handle {
+        flex: 0 0 6px;
+        cursor: row-resize;
+        background: transparent;
+        position: relative;
+      }
+      .sql-split-handle::after {
+        content: "";
+        position: absolute;
+        left: 20%;
+        right: 20%;
+        top: 2px;
+        height: 2px;
+        border-radius: 9999px;
+        background: #2d3c52;
+      }
+      .sql-split-handle:hover::after,
+      .sql-split-handle.is-dragging::after {
+        background: #38bdf8;
+      }
+      html.light .sql-split-handle::after {
+        background: #cbd5e1;
+      }
+      html.light .sql-split-handle:hover::after,
+      html.light .sql-split-handle.is-dragging::after {
+        background: #0284c7;
+      }
+    </style>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"
+    ></script>
+    <script src="/js/clock.js"></script>
+    <script src="/js/credits.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/appSettings.js"></script>
+    <script src="/js/tableGrid.js"></script>
+    <script src="/js/tableInspector.js"></script>
+    <script src="/js/exportGrid.js"></script>
+    <script src="/js/queryHistory.js"></script>
+    <script src="/js/sqlAutocomplete.js"></script>
+    <script src="/js/queryEditor.js"></script>
+    <script src="/js/app.js"></script>
+  </head>
+  <body
+    class="h-full bg-surface-900 text-slate-200 antialiased"
+    x-data="mysqlClient()"
+    x-init="init()"
+  >
+    <svg class="hidden" aria-hidden="true">
+      <symbol
+        id="i-chevron"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M9 5l7 7-7 7" />
+      </symbol>
+      <symbol
+        id="i-search"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+      >
+        <circle cx="11" cy="11" r="7" />
+        <path d="M20.5 20.5L16.5 16.5" />
+      </symbol>
+      <symbol
+        id="i-refresh"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M20.5 12a8.5 8.5 0 11-2.6-6.1" />
+        <path d="M20.5 3.5V9H15" />
+      </symbol>
+      <symbol
+        id="i-plus"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+      >
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol
+        id="i-collapse"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
+      </symbol>
+      <symbol
+        id="i-expand"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M13 7l5 5-5 5M6 7l5 5-5 5" />
+      </symbol>
+      <symbol
+        id="i-server"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <rect x="3" y="4" width="18" height="7" rx="2" />
+        <rect x="3" y="13" width="18" height="7" rx="2" />
+        <path d="M7 7.5h.01M7 16.5h.01" />
+      </symbol>
+      <symbol
+        id="i-folder"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M3 7a2 2 0 012-2h3.6a2 2 0 011.4.6L11.5 7H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
+        />
+      </symbol>
+      <symbol
+        id="i-database"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <ellipse cx="12" cy="5.5" rx="7.5" ry="3" />
+        <path d="M4.5 5.5v13c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-13" />
+        <path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3" />
+      </symbol>
+      <symbol
+        id="i-table"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M3 9.5h18M9 9.5V20" />
+      </symbol>
+      <symbol
+        id="i-view"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"
+        />
+        <circle cx="12" cy="12" r="2.8" />
+      </symbol>
+      <symbol
+        id="i-procedure"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M8 4h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8" />
+        <path d="M8 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2" />
+        <path d="M10 8h6M10 12h6M10 16h4" />
+      </symbol>
+      <symbol
+        id="i-trigger"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
+      </symbol>
+      <symbol
+        id="i-event"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M3 10h18M8 3v4M16 3v4" />
+      </symbol>
+      <symbol
+        id="i-history"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M3 12a9 9 0 109-9" />
+        <path d="M3 5v4h4" />
+        <path d="M12 7v5l3 2" />
+      </symbol>
+      <symbol
+        id="i-download"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M12 4v11" />
+        <path d="M7 11l5 5 5-5" />
+        <path d="M5 19h14" />
+      </symbol>
+      <symbol
+        id="i-sun"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="4" />
+        <path
+          d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.05 5.05l1.55 1.55M17.4 17.4l1.55 1.55M5.05 18.95l1.55-1.55M17.4 6.6l1.55-1.55"
+        />
+      </symbol>
+      <symbol
+        id="i-moon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M20.5 14.2A8.2 8.2 0 019.8 3.5 8.5 8.5 0 1020.5 14.2z" />
+      </symbol>
+      <symbol
+        id="i-settings"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="3" />
+        <path
+          d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"
+        />
+      </symbol>
+    </svg>
+
+    <div class="flex h-full flex-col">
+      <header
+        class="flex flex-wrap items-center justify-between gap-3 border-b border-surface-700 px-4 py-3"
+      >
+        <div class="flex min-w-0 flex-1 items-center gap-3">
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded text-sm font-bold text-white"
+          >
+            <img
+              src="./../assets/logo.png"
+              alt="MySQL Studio Web"
+              width="48"
+              height="48"
+            />
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-sm font-semibold tracking-wide text-white">
+              MySQL Studio Web
+            </h1>
+          </div>
+          <div class="ml-2 flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <template
+              x-for="session in openSessions"
+              :key="session.connection.id"
+            >
+              <button
+                type="button"
+                class="group flex max-w-[12rem] items-center gap-1.5 rounded border px-2 py-1 text-xs transition"
+                :class="activeConnectionId === session.connection.id
+                  ? 'bg-surface-700 text-white'
+                  : 'border-surface-600 bg-surface-800 text-slate-300 hover:bg-surface-700'"
+                :style="headerBadgeStyle(session.connection)"
+                @click="switchSession(session.connection.id)"
+                :title="`${session.connection.nickname} — click to switch`"
+              >
+                <span
+                  class="h-2 w-2 shrink-0 rounded-full"
+                  :style="`background:${session.connection.theme_color || '#3B82F6'}`"
+                ></span>
+                <span
+                  class="truncate"
+                  :class="activeConnectionId === session.connection.id ? 'font-bold' : 'font-normal'"
+                  x-text="session.connection.nickname"
+                ></span>
+                <span
+                  class="ml-0.5 rounded px-1 text-slate-400 hover:bg-rose-900/60 hover:text-rose-300"
+                  title="Disconnect"
+                  @click.stop="disconnectSession(session.connection.id)"
+                  >×</span
+                >
+              </button>
+            </template>
+            <span
+              x-show="openSessions.length === 0"
+              class="text-xs text-slate-500"
+              >No open sessions</span
+            >
+          </div>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded border border-surface-600 px-2.5 py-1.5 text-sm text-slate-200 hover:bg-surface-700"
+            :title="isDarkTheme() ? 'Switch to light theme' : 'Switch to dark theme'"
+            @click="toggleTheme()"
+          >
+            <svg class="h-4 w-4" x-show="isDarkTheme()">
+              <use href="#i-sun" />
+            </svg>
+            <svg class="h-4 w-4" x-show="!isDarkTheme()" x-cloak>
+              <use href="#i-moon" />
+            </svg>
+            <span x-text="isDarkTheme() ? 'Light' : 'Dark'"></span>
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded border border-surface-600 px-2.5 py-1.5 text-sm text-slate-200 hover:bg-surface-700"
+            title="Query history"
+            @click="openHistoryPanel()"
+          >
+            <svg class="h-4 w-4"><use href="#i-history" /></svg>
+            History
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded border border-surface-600 px-2.5 py-1.5 text-sm text-slate-200 hover:bg-surface-700"
+            title="Font & display settings"
+            @click="openSettings()"
+          >
+            <svg class="h-4 w-4"><use href="#i-settings" /></svg>
+            Settings
+          </button>
+          <button
+            type="button"
+            class="shrink-0 rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500"
+            @click="openCreate()"
+          >
+            New Connection
+          </button>
+        </div>
+      </header>
+
+      <main class="flex flex-1 overflow-hidden">
+        <!-- Pane 1: connections -->
+        <aside
+          class="flex w-[17.5rem] shrink-0 flex-col border-r border-surface-700 bg-surface-800"
+        >
+          <div class="border-b border-surface-700 px-3 py-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <span
+                class="text-xs font-semibold uppercase tracking-widest text-slate-400"
+                >Connections</span
+              >
+              <div class="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  class="rounded p-1 text-slate-400 hover:bg-surface-700 hover:text-slate-100"
+                  title="Reload connection list"
+                  @click="loadConnections()"
+                >
+                  <svg class="h-4 w-4"><use href="#i-refresh" /></svg>
+                </button>
+                <button
+                  type="button"
+                  class="rounded p-1 text-slate-400 hover:bg-surface-700 hover:text-slate-100"
+                  title="New connection"
+                  @click="openCreate()"
+                >
+                  <svg class="h-4 w-4"><use href="#i-plus" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="relative mt-2">
+              <svg
+                class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+              >
+                <use href="#i-search" />
+              </svg>
+              <input
+                type="search"
+                x-model="connectionFilter"
+                placeholder="Search connections"
+                class="w-full rounded-md border border-surface-600 bg-surface-900 py-1.5 pl-8 pr-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-sky-500"
+              />
+            </div>
+          </div>
+
+          <div class="flex-1 overflow-y-auto px-1.5 py-2">
+            <template x-if="loading">
+              <p class="px-2 py-4 text-sm text-slate-400">Loading…</p>
+            </template>
+            <template x-if="!loading && connections.length === 0">
+              <div class="px-2 py-6 text-center text-sm text-slate-400">
+                <p>No connections yet.</p>
+                <button
+                  type="button"
+                  class="mt-2 text-sky-400 hover:underline"
+                  @click="openCreate()"
+                >
+                  Add one
+                </button>
+              </div>
+            </template>
+            <template
+              x-if="!loading && connections.length > 0 && filteredConnections.length === 0"
+            >
+              <p class="px-2 py-4 text-sm text-slate-400">No matches.</p>
+            </template>
+
+            <ul class="space-y-1">
+              <template x-for="conn in filteredConnections" :key="conn.id">
+                <li>
+                  <div
+                    class="relative cursor-pointer overflow-hidden rounded-md py-2 pl-3 pr-2 transition"
+                    :class="selectedConnectionId === conn.id ? '' : 'hover:bg-surface-700/50'"
+                    :style="connectionRowStyle(conn)"
+                    @click="selectConnection(conn.id)"
+                  >
+                    <div class="flex items-center gap-2">
+                      <svg
+                        class="h-4 w-4 shrink-0"
+                        :style="`color:${isOpen(conn.id) ? (conn.theme_color || '#3B82F6') : '#64748b'}`"
+                      >
+                        <use href="#i-server" />
+                      </svg>
+                      <span
+                        class="min-w-0 flex-1 truncate text-sm"
+                        :class="isOpen(conn.id) ? 'font-semibold text-white' : 'font-medium text-slate-300'"
+                        :title="conn.nickname"
+                        x-text="conn.nickname"
+                      ></span>
+                      <template x-if="isOpen(conn.id)">
+                        <span
+                          class="h-2 w-2 shrink-0 rounded-full"
+                          :style="`background:${conn.theme_color || '#3B82F6'}; ${activeConnectionId === conn.id ? 'box-shadow: 0 0 8px ' + (conn.theme_color || '#3B82F6') : ''}`"
+                          :title="activeConnectionId === conn.id ? 'Active session' : 'Connected'"
+                        ></span>
+                      </template>
+                    </div>
+                    <p
+                      class="mt-0.5 truncate pl-6 text-xs text-slate-500"
+                      x-text="`${conn.user}@${conn.host}:${conn.port}`"
+                    ></p>
+                    <p
+                      x-show="conn.keep_alive"
+                      class="truncate pl-6 text-xs text-sky-400/70"
+                      x-text="`keep-alive ${conn.keep_alive_interval_sec || 120}s`"
+                    ></p>
+                  </div>
+
+                  <div
+                    class="mt-1 mb-1 flex flex-wrap items-center gap-1 pl-6"
+                    x-show="selectedConnectionId === conn.id"
+                    x-cloak
+                  >
+                    <button
+                      type="button"
+                      class="rounded bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+                      x-show="!isOpen(conn.id)"
+                      :disabled="connectingId === conn.id"
+                      @click.stop="connectSession(conn.id)"
+                    >
+                      <span
+                        x-text="connectingId === conn.id ? 'Connecting…' : 'Connect'"
+                      ></span>
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-200 hover:bg-surface-700"
+                      x-show="isOpen(conn.id)"
+                      @click.stop="disconnectSession(conn.id)"
+                    >
+                      Disconnect
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-1.5 py-1 text-xs text-slate-400 hover:bg-surface-700 hover:text-slate-200"
+                      @click.stop="testSaved(conn)"
+                    >
+                      Test
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-1.5 py-1 text-xs text-slate-400 hover:bg-surface-700 hover:text-slate-200"
+                      @click.stop="openEdit(conn)"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-1.5 py-1 text-xs text-rose-400 hover:bg-surface-700"
+                      @click.stop="askDelete(conn)"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              </template>
+            </ul>
+          </div>
+          <div class="border-t border-surface-700">
+            <button
+              type="button"
+              class="grid w-full grid-cols-2 gap-2 px-3 py-2 text-left hover:bg-surface-700/40"
+              title="Toggle 12/24-hour clock"
+              @click="toggleClockFormat()"
+            >
+              <span>
+                <span
+                  class="block text-[10px] uppercase tracking-wider text-slate-500"
+                  >Local</span
+                >
+                <span
+                  class="font-mono text-sm text-slate-200"
+                  x-text="localClock"
+                ></span>
+              </span>
+              <span>
+                <span
+                  class="block text-[10px] uppercase tracking-wider text-slate-500"
+                  >UTC</span
+                >
+                <span
+                  class="font-mono text-sm text-slate-300"
+                  x-text="utcClock"
+                ></span>
+              </span>
+              <span
+                class="col-span-2 text-[10px] text-slate-500"
+                x-text="clock12Hour ? '12-hour · click for 24-hour' : '24-hour · click for 12-hour'"
+              ></span>
+            </button>
+            <button
+              type="button"
+              class="flex w-full items-center justify-between gap-2 border-t border-surface-700/80 px-3 py-2 text-left hover:bg-surface-700/40"
+              title="About & credits"
+              @click="openCredits()"
+            >
+              <span class="min-w-0">
+                <span
+                  class="block text-[10px] uppercase tracking-wider text-slate-500"
+                  >Credits</span
+                >
+                <span
+                  class="truncate text-xs text-slate-300"
+                  x-text="creditsInfo().owner"
+                ></span>
+              </span>
+              <span class="shrink-0 text-[10px] text-sky-400">About</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- Pane 2 collapsed: thin strip -->
+        <button
+          type="button"
+          class="group flex w-10 shrink-0 flex-col items-center gap-3 border-r border-surface-700 bg-surface-800/60 py-2.5 text-slate-400 hover:bg-surface-700/60 hover:text-slate-100"
+          x-show="explorerCollapsed"
+          x-cloak
+          title="Show schema explorer"
+          @click="toggleExplorer()"
+        >
+          <svg class="h-4 w-4 shrink-0"><use href="#i-expand" /></svg>
+          <span
+            class="text-xs font-semibold uppercase tracking-widest"
+            style="writing-mode: vertical-rl"
+            >Explorer</span
+          >
+        </button>
+
+        <!-- Pane 2: schema explorer for the selected connection -->
+        <aside
+          class="flex w-[19rem] shrink-0 flex-col border-r border-surface-700 bg-surface-800/60"
+          x-show="!explorerCollapsed"
+        >
+          <div
+            class="flex items-center justify-between gap-2 border-b border-surface-700 px-3 py-2.5"
+          >
+            <span
+              class="min-w-0 truncate text-xs font-semibold uppercase tracking-widest text-slate-400"
+            >
+              Schema Explorer
+            </span>
+            <button
+              type="button"
+              class="shrink-0 rounded p-1 text-slate-400 hover:bg-surface-700 hover:text-slate-100"
+              title="Hide schema explorer"
+              @click="toggleExplorer()"
+            >
+              <svg class="h-4 w-4"><use href="#i-collapse" /></svg>
+            </button>
+          </div>
+
+          <template x-if="!selectedConnection">
+            <div
+              class="flex flex-1 items-center justify-center p-4 text-center text-sm text-slate-500"
+            >
+              Select a connection to browse its schema.
+            </div>
+          </template>
+
+          <template x-if="selectedConnection">
+            <div class="flex min-h-0 flex-1 flex-col">
+              <div
+                class="px-3 py-2.5"
+                :style="`box-shadow: inset 0 -2px 0 ${selectedConnection.theme_color || '#3B82F6'}`"
+              >
+                <div class="flex items-center gap-2">
+                  <svg
+                    class="h-4 w-4 shrink-0"
+                    :style="`color:${selectedConnection.theme_color || '#3B82F6'}`"
+                  >
+                    <use href="#i-server" />
+                  </svg>
+                  <p
+                    class="min-w-0 flex-1 truncate text-sm font-bold text-white"
+                    :title="selectedConnection.nickname"
+                    x-text="selectedConnection.nickname"
+                  ></p>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded p-1 text-slate-400 hover:bg-surface-700 hover:text-slate-100"
+                    x-show="isOpen(selectedConnection.id)"
+                    title="Reload databases"
+                    @click="loadDatabases(selectedConnection.id)"
+                  >
+                    <svg class="h-4 w-4"><use href="#i-refresh" /></svg>
+                  </button>
+                </div>
+
+                <div
+                  class="relative mt-2"
+                  x-show="isOpen(selectedConnection.id)"
+                >
+                  <svg
+                    class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+                  >
+                    <use href="#i-search" />
+                  </svg>
+                  <input
+                    type="search"
+                    placeholder="Search tables"
+                    class="w-full rounded-md border border-surface-600 bg-surface-900 py-1.5 pl-8 pr-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-sky-500"
+                    :value="tree(selectedConnection.id)?.search || ''"
+                    @input="ensureTree(selectedConnection.id).search = $event.target.value"
+                  />
+                </div>
+                <p
+                  class="mt-1 text-xs text-slate-500"
+                  x-show="isOpen(selectedConnection.id) && schemaQuery(selectedConnection.id)"
+                  x-cloak
+                >
+                  Filters locally across databases you have expanded.
+                </p>
+              </div>
+
+              <div
+                class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-2 text-[13px]"
+              >
+                <template x-if="!isOpen(selectedConnection.id)">
+                  <div class="px-2 py-6 text-center">
+                    <p class="text-sm text-slate-400">Not connected</p>
+                    <button
+                      type="button"
+                      class="mt-2 rounded bg-sky-600 px-3 py-1 text-xs font-medium text-white hover:bg-sky-500"
+                      @click="connectSession(selectedConnection.id)"
+                    >
+                      Connect
+                    </button>
+                  </div>
+                </template>
+
+                <template x-if="isOpen(selectedConnection.id)">
+                  <div
+                    x-effect="!explorerCollapsed && ensureDatabases(selectedConnection.id)"
+                  >
+                    <p
+                      class="flex items-center gap-2 px-1 py-1.5 text-sm text-slate-400"
+                      x-show="tree(selectedConnection.id)?.databasesLoading"
+                    >
+                      <svg class="h-4 w-4 animate-spin text-slate-500">
+                        <use href="#i-refresh" />
+                      </svg>
+                      <span>Loading databases…</span>
+                    </p>
+
+                    <div
+                      class="px-1 py-2 text-sm"
+                      x-show="tree(selectedConnection.id)?.databasesFailed"
+                      x-cloak
+                    >
+                      <p class="text-rose-300">Could not load databases.</p>
+                      <button
+                        type="button"
+                        class="mt-1 text-xs text-sky-400 hover:underline"
+                        @click="loadDatabases(selectedConnection.id)"
+                      >
+                        Retry
+                      </button>
+                    </div>
+
+                    <ul class="space-y-0.5">
+                      <li
+                        class="px-1 py-1 text-xs text-slate-500"
+                        x-show="tree(selectedConnection.id)?.databases && visibleDatabases(selectedConnection.id).length === 0"
+                      >
+                        No matching databases.
+                      </li>
+
+                      <template
+                        x-for="dbName in visibleDatabases(selectedConnection.id)"
+                        :key="dbName"
+                      >
+                        <li>
+                          <button
+                            type="button"
+                            class="flex w-full items-center gap-1.5 rounded px-1 py-1.5 text-left"
+                            :class="sessions[selectedConnection.id]?.activeDatabase === dbName ? 'bg-surface-700/80' : 'hover:bg-surface-700/50'"
+                            :title="dbName"
+                            @click="toggleDatabase(selectedConnection.id, dbName)"
+                          >
+                            <svg
+                              class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
+                              :class="isDbExpanded(selectedConnection.id, dbName) ? 'rotate-90' : ''"
+                            >
+                              <use href="#i-chevron" />
+                            </svg>
+                            <svg class="h-4 w-4 shrink-0 text-sky-400/90">
+                              <use href="#i-database" />
+                            </svg>
+                            <span
+                              class="min-w-0 flex-1 truncate"
+                              :class="sessions[selectedConnection.id]?.activeDatabase === dbName ? 'font-semibold text-white' : 'text-slate-300'"
+                              x-text="dbName"
+                            ></span>
+                          </button>
+
+                          <div
+                            class="ml-3 border-l border-surface-700/70 pl-2"
+                            x-show="isDbExpanded(selectedConnection.id, dbName)"
+                          >
+                            <p
+                              class="px-1 py-1 text-xs text-slate-500"
+                              x-show="tree(selectedConnection.id)?.dbChildren[dbName]?.loading"
+                            >
+                              Loading objects…
+                            </p>
+
+                            <template
+                              x-if="tree(selectedConnection.id)?.dbChildren[dbName] && !tree(selectedConnection.id).dbChildren[dbName].loading"
+                            >
+                              <ul class="space-y-0.5 py-0.5">
+                                <template
+                                  x-for="folder in schemaFolderList"
+                                  :key="folder.key"
+                                >
+                                  <li>
+                                    <button
+                                      type="button"
+                                      class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left text-slate-400 hover:bg-surface-700/50 hover:text-slate-200"
+                                      :title="folder.label"
+                                      @click="toggleSchemaFolder(selectedConnection.id, dbName, folder.key)"
+                                    >
+                                      <svg
+                                        class="h-3 w-3 shrink-0 text-slate-500 transition-transform"
+                                        :class="isSchemaFolderExpanded(selectedConnection.id, dbName, folder.key) ? 'rotate-90' : ''"
+                                      >
+                                        <use href="#i-chevron" />
+                                      </svg>
+                                      <svg
+                                        class="h-3.5 w-3.5 shrink-0 text-amber-400/80"
+                                      >
+                                        <use href="#i-folder" />
+                                      </svg>
+                                      <span
+                                        class="min-w-0 flex-1 truncate text-xs font-medium"
+                                        x-text="folder.label"
+                                      ></span>
+                                      <span
+                                        class="shrink-0 tabular-nums text-[10px] text-slate-500"
+                                        x-text="folderItems(selectedConnection.id, dbName, folder.key).length"
+                                      ></span>
+                                    </button>
+
+                                    <ul
+                                      class="ml-2 border-l border-surface-700/60 pl-1.5"
+                                      x-show="isSchemaFolderExpanded(selectedConnection.id, dbName, folder.key)"
+                                    >
+                                      <template
+                                        x-for="name in visibleFolderItems(selectedConnection.id, dbName, folder.key)"
+                                        :key="folder.key + ':' + name"
+                                      >
+                                        <li>
+                                          <button
+                                            type="button"
+                                            class="flex w-full items-center gap-1.5 rounded px-1 py-1 text-left text-slate-300 hover:bg-surface-700/50"
+                                            :class="
+                                              folder.openMode === 'table'
+                                                ? (activeTableView()?.database === dbName && activeTableView()?.table === name ? 'bg-surface-700 text-white' : '')
+                                                : (isSchemaObjectSelected(selectedConnection.id, dbName, folder.kind, name) ? 'bg-surface-700 text-white' : '')
+                                            "
+                                            :title="folder.openMode === 'table' ? `Open ${name}` : `View CREATE for ${name}`"
+                                            @click="folder.openMode === 'table'
+                                              ? openTableView(selectedConnection.id, dbName, name)
+                                              : openSchemaObject(selectedConnection.id, dbName, folder.kind, name)"
+                                          >
+                                            <svg
+                                              class="h-4 w-4 shrink-0 text-emerald-400/80"
+                                              x-show="folder.kind === 'table'"
+                                            >
+                                              <use href="#i-table" />
+                                            </svg>
+                                            <svg
+                                              class="h-4 w-4 shrink-0 text-violet-400/80"
+                                              x-show="folder.kind === 'view'"
+                                            >
+                                              <use href="#i-view" />
+                                            </svg>
+                                            <svg
+                                              class="h-4 w-4 shrink-0 text-sky-400/80"
+                                              x-show="folder.kind === 'procedure'"
+                                            >
+                                              <use href="#i-procedure" />
+                                            </svg>
+                                            <svg
+                                              class="h-4 w-4 shrink-0 text-amber-400/80"
+                                              x-show="folder.kind === 'trigger'"
+                                            >
+                                              <use href="#i-trigger" />
+                                            </svg>
+                                            <svg
+                                              class="h-4 w-4 shrink-0 text-rose-400/80"
+                                              x-show="folder.kind === 'event'"
+                                            >
+                                              <use href="#i-event" />
+                                            </svg>
+                                            <span
+                                              class="truncate"
+                                              :class="folder.kind === 'view' ? 'italic' : ''"
+                                              x-text="name"
+                                            ></span>
+                                          </button>
+                                        </li>
+                                      </template>
+                                      <li
+                                        class="px-1 py-1 text-xs text-slate-500"
+                                        x-show="!visibleFolderItems(selectedConnection.id, dbName, folder.key).length"
+                                        x-text="schemaQuery(selectedConnection.id) ? 'No matches' : 'Empty'"
+                                      ></li>
+                                    </ul>
+                                  </li>
+                                </template>
+                              </ul>
+                            </template>
+                          </div>
+                        </li>
+                      </template>
+                    </ul>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </aside>
+
+        <section class="flex flex-1 flex-col overflow-hidden">
+          <div
+            class="flex flex-wrap items-center gap-3 border-b border-surface-700 px-4 py-2 text-xs"
+            x-show="activeSession"
+          >
+            <span class="text-slate-500">Context</span>
+            <span
+              class="rounded border px-2 py-0.5 font-medium text-white"
+              :style="`border-color:${activeSession?.connection?.theme_color || '#3B82F6'}; color:${activeSession?.connection?.theme_color || '#3B82F6'}`"
+              x-text="activeSession?.connection?.nickname || ''"
+            ></span>
+            <span class="text-slate-600">/</span>
+            <span
+              class="rounded bg-surface-800 px-2 py-0.5 font-mono text-slate-200"
+              x-text="activeSession?.activeDatabase || 'No database selected'"
+            ></span>
+            <template x-if="activeTableView()?.table">
+              <span class="flex items-center gap-1.5">
+                <span class="text-slate-600">/</span>
+                <span
+                  class="rounded bg-surface-800 px-2 py-0.5 font-mono text-emerald-300"
+                  x-text="activeTableView().table"
+                ></span>
+              </span>
+            </template>
+
+            <div
+              class="ml-auto inline-flex overflow-hidden rounded border border-surface-600"
+            >
+              <button
+                type="button"
+                class="px-3 py-1 text-xs font-medium transition-colors"
+                :class="editorMode() !== 'sql' ? '' : 'text-slate-300 hover:bg-surface-700'"
+                :style="editorMode() !== 'sql' ? `background:${themeOf(activeSession?.connection)};color:#fff` : ''"
+                @click="setEditorMode('table')"
+              >
+                Data
+              </button>
+              <button
+                type="button"
+                class="border-l border-surface-600 px-3 py-1 text-xs font-medium transition-colors"
+                :class="editorMode() === 'sql' ? '' : 'text-slate-300 hover:bg-surface-700'"
+                :style="editorMode() === 'sql' ? `background:${themeOf(activeSession?.connection)};color:#fff` : ''"
+                @click="setEditorMode('sql')"
+              >
+                SQL
+              </button>
+            </div>
+          </div>
+
+          <!-- Empty: no session -->
+          <div
+            class="flex flex-1 items-center justify-center p-8"
+            x-show="!activeSession"
+          >
+            <div class="max-w-lg text-center">
+              <p class="text-lg font-medium text-white">No active session</p>
+              <p class="mt-2 text-sm text-slate-400">
+                Pick a connection in the left rail and connect it. Its databases
+                load into the explorer beside it.
+              </p>
+            </div>
+          </div>
+
+          <!-- Connected, no table open yet -->
+          <div
+            class="flex flex-1 items-center justify-center p-8"
+            x-show="activeSession && editorMode() !== 'sql' && !activeTableView()?.table && !activeTableView()?.loading"
+            x-cloak
+          >
+            <div class="max-w-lg text-center">
+              <div class="mb-3 flex items-center justify-center gap-2">
+                <span
+                  class="h-3 w-3 rounded-full"
+                  :style="`background:${activeSession?.connection?.theme_color || '#3B82F6'}`"
+                ></span>
+                <p
+                  class="text-lg font-medium text-white"
+                  x-text="`Connected to ${activeSession?.connection?.nickname || ''}`"
+                ></p>
+              </div>
+              <p
+                class="font-mono text-sm text-slate-400"
+                x-text="activeSession ? `${activeSession.connection.user}@${activeSession.connection.host}:${activeSession.connection.port}` : ''"
+              ></p>
+              <p
+                class="mt-1 text-sm"
+                :class="activeSession?.activeDatabase ? 'text-emerald-400' : 'text-slate-500'"
+                x-text="activeSession?.activeDatabase ? `Selected database: ${activeSession.activeDatabase}` : 'Select a database in the schema explorer'"
+              ></p>
+              <p class="mt-4 text-sm text-slate-500">
+                Click a table to load its first page. More rows load as you
+                scroll.
+              </p>
+            </div>
+          </div>
+
+          <!-- Table data grid -->
+          <div
+            class="flex min-h-0 flex-1 flex-col"
+            x-show="activeSession && editorMode() !== 'sql' && (activeTableView()?.table || activeTableView()?.loading)"
+            x-cloak
+          >
+            <div
+              class="flex flex-wrap items-center gap-2 border-b border-surface-700 px-3 py-2"
+            >
+              <svg class="h-4 w-4 shrink-0 text-emerald-400/80">
+                <use href="#i-table" />
+              </svg>
+              <span
+                class="font-mono text-sm font-semibold text-white"
+                x-text="activeTableView()?.table || '…'"
+              ></span>
+              <span
+                class="text-xs text-slate-500"
+                x-show="activeTableView()?.database"
+                x-text="`in ${activeTableView()?.database}`"
+              ></span>
+
+              <div class="ml-auto flex flex-wrap items-center gap-2">
+                <template x-if="inspectorTab() === 'data'">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <select
+                      class="rounded border border-surface-600 bg-surface-900 px-2 py-1 text-xs text-slate-200 outline-none focus:border-sky-500"
+                      :value="activeTableView()?.filterColumn || ''"
+                      @change="setFilterColumn($event.target.value)"
+                      title="Column to search"
+                    >
+                      <option value="">Select search column</option>
+                      <template
+                        x-for="col in (activeTableView()?.columns || [])"
+                        :key="col"
+                      >
+                        <option :value="col" x-text="col"></option>
+                      </template>
+                    </select>
+                    <div class="relative">
+                      <svg
+                        class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500"
+                      >
+                        <use href="#i-search" />
+                      </svg>
+                      <input
+                        type="search"
+                        :placeholder="activeTableView()?.filterColumn ? `Starts with… (${activeTableView().filterColumn})` : 'Select a column first'"
+                        class="w-44 rounded border border-surface-600 bg-surface-900 py-1 pl-7 pr-2 text-xs text-white outline-none placeholder:text-slate-500 focus:border-sky-500"
+                        :disabled="!activeTableView()?.filterColumn"
+                        :value="activeTableView()?.filterValue || ''"
+                        @input="setFilterValue($event.target.value)"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-300 hover:bg-surface-700 disabled:opacity-40"
+                      title="Reset filters, sorting, page size and go back to the first page"
+                      :disabled="activeTableView()?.loading || !hasGridAdjustments()"
+                      @click="resetTableView()"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-300 hover:bg-surface-700"
+                      title="Reload table data"
+                      :disabled="activeTableView()?.loading"
+                      @click="reloadTableView()"
+                    >
+                      Reload
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-300 hover:bg-surface-700 disabled:opacity-40"
+                      title="Quick download loaded rows as CSV"
+                      :disabled="!gridRows().length"
+                      @click="quickExportLoaded('table', 'csv')"
+                    >
+                      CSV
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-300 hover:bg-surface-700 disabled:opacity-40"
+                      title="Quick download loaded rows as JSON"
+                      :disabled="!gridRows().length"
+                      @click="quickExportLoaded('table', 'json')"
+                    >
+                      JSON
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-sky-700/60 bg-sky-950/40 px-2 py-1 text-xs text-sky-200 hover:bg-sky-900/50 disabled:opacity-40"
+                      title="Batched export — all rows, file naming, data/exports/"
+                      :disabled="!activeTableView()?.table"
+                      @click="openExportModal({ source: 'table' })"
+                    >
+                      Export…
+                    </button>
+                  </div>
+                </template>
+                <template x-if="inspectorTab() === 'ddl'">
+                  <button
+                    type="button"
+                    class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-300 hover:bg-surface-700"
+                    @click="copyInspectorDdl()"
+                  >
+                    Copy DDL
+                  </button>
+                </template>
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 text-xs text-slate-400 hover:bg-surface-700 hover:text-slate-200"
+                  @click="clearTableView()"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <!-- Table inspector tabs -->
+            <div
+              class="flex items-center gap-1 border-b border-surface-700 px-3 py-1"
+            >
+              <template
+                x-for="tab in [
+                { id: 'data', label: 'Data' },
+                { id: 'columns', label: 'Columns & Keys' },
+                { id: 'indexes', label: 'Indexes & Constraints' },
+                { id: 'ddl', label: 'DDL' }
+              ]"
+                :key="tab.id"
+              >
+                <button
+                  type="button"
+                  class="rounded px-2.5 py-1 text-xs font-medium transition-colors"
+                  :class="inspectorTab() === tab.id
+                    ? ''
+                    : 'text-slate-400 hover:bg-surface-800 hover:text-slate-200'"
+                  :style="inspectorTab() === tab.id
+                    ? `background:color-mix(in srgb, ${themeOf(activeSession?.connection)} 85%, #000);color:#fff`
+                    : ''"
+                  @click="setInspectorTab(tab.id)"
+                  x-text="tab.label"
+                ></button>
+              </template>
+            </div>
+
+            <!-- Data grid -->
+            <div
+              class="relative min-h-0 flex-1 overflow-auto"
+              x-show="inspectorTab() === 'data'"
+              @scroll.passive="onGridScroll($event)"
+            >
+              <div
+                class="flex h-full items-center justify-center text-sm text-slate-400"
+                x-show="activeTableView()?.loading"
+              >
+                Fetching rows…
+              </div>
+
+              <table
+                class="min-w-full border-collapse text-left text-xs"
+                x-show="!activeTableView()?.loading && activeTableView()?.columns?.length"
+              >
+                <thead class="sticky top-0 z-10">
+                  <tr class="bg-surface-800">
+                    <th
+                      class="sticky left-0 z-20 border-b border-r border-surface-700 bg-surface-800 px-2 py-2 font-medium text-slate-500"
+                    >
+                      #
+                    </th>
+                    <template
+                      x-for="col in (activeTableView()?.columns || [])"
+                      :key="col"
+                    >
+                      <th
+                        class="cursor-pointer select-none whitespace-nowrap border-b border-surface-700 px-3 py-2 font-semibold text-slate-200 hover:bg-surface-700 hover:text-white"
+                        @click="sortGridBy(col)"
+                      >
+                        <span x-text="col"></span>
+                        <span
+                          class="text-sky-400"
+                          x-text="sortIndicator(col)"
+                        ></span>
+                      </th>
+                    </template>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template
+                    x-for="(row, rowIndex) in gridRows()"
+                    :key="rowIndex"
+                  >
+                    <tr
+                      class="odd:bg-surface-900/40 even:bg-surface-800/20 hover:bg-surface-700/40"
+                    >
+                      <td
+                        class="sticky left-0 z-[1] border-r border-surface-700/60 bg-surface-900 px-2 py-1.5 font-mono text-slate-500"
+                        x-text="rowIndex + 1"
+                      ></td>
+                      <template
+                        x-for="col in (activeTableView()?.columns || [])"
+                        :key="col"
+                      >
+                        <td
+                          class="max-w-xs truncate whitespace-nowrap border-b border-surface-700/40 px-3 py-1.5 font-mono"
+                          :class="isNullCell(row[col]) ? 'italic text-slate-600' : 'text-slate-200'"
+                          :title="formatCell(row[col])"
+                          x-text="formatCell(row[col])"
+                        ></td>
+                      </template>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+
+              <div
+                class="sticky bottom-0 flex justify-center bg-surface-900/90 px-3 py-2 text-xs text-slate-400"
+                x-show="activeTableView()?.loadingMore"
+              >
+                Loading next page…
+              </div>
+
+              <div
+                class="flex h-40 items-center justify-center text-sm text-slate-500"
+                x-show="!activeTableView()?.loading && !activeTableView()?.error && activeTableView()?.columns?.length && gridRows().length === 0"
+              >
+                No rows to display
+              </div>
+            </div>
+
+            <!-- Columns & Keys -->
+            <div
+              class="relative min-h-0 flex-1 overflow-auto"
+              x-show="inspectorTab() === 'columns'"
+              x-cloak
+            >
+              <div
+                class="flex h-full items-center justify-center text-sm text-slate-400"
+                x-show="activeTableView()?.meta?.loading"
+              >
+                Loading columns…
+              </div>
+              <div
+                class="m-4 rounded border border-rose-700/50 bg-rose-950/40 px-4 py-3 text-xs text-rose-300"
+                x-show="activeTableView()?.meta?.error"
+                x-text="activeTableView()?.meta?.error"
+              ></div>
+              <table
+                class="min-w-full border-collapse text-left text-xs"
+                x-show="!activeTableView()?.meta?.loading && !activeTableView()?.meta?.error"
+              >
+                <thead class="sticky top-0 z-10">
+                  <tr class="bg-surface-800">
+                    <th
+                      class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                    >
+                      Column
+                    </th>
+                    <th
+                      class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                    >
+                      Type
+                    </th>
+                    <th
+                      class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                    >
+                      Null
+                    </th>
+                    <th
+                      class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                    >
+                      Key
+                    </th>
+                    <th
+                      class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                    >
+                      Default
+                    </th>
+                    <th
+                      class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                    >
+                      Extra
+                    </th>
+                    <th
+                      class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                    >
+                      Comment
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template
+                    x-for="col in (activeTableView()?.meta?.columns || [])"
+                    :key="col.name"
+                  >
+                    <tr class="odd:bg-surface-900/40 even:bg-surface-800/20">
+                      <td
+                        class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-slate-100"
+                        x-text="col.name"
+                      ></td>
+                      <td
+                        class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-sky-300"
+                        x-text="col.type"
+                      ></td>
+                      <td
+                        class="border-b border-surface-700/40 px-3 py-1.5 text-slate-300"
+                        x-text="col.nullable"
+                      ></td>
+                      <td class="border-b border-surface-700/40 px-3 py-1.5">
+                        <span
+                          class="rounded bg-amber-900/40 px-1.5 py-0.5 font-mono text-amber-200"
+                          x-show="col.key"
+                          x-text="keyBadge(col.key)"
+                        ></span>
+                      </td>
+                      <td
+                        class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-slate-400"
+                        x-text="col.default == null ? 'NULL' : col.default"
+                      ></td>
+                      <td
+                        class="border-b border-surface-700/40 px-3 py-1.5 text-slate-400"
+                        x-text="col.extra || ''"
+                      ></td>
+                      <td
+                        class="border-b border-surface-700/40 px-3 py-1.5 text-slate-500"
+                        x-text="col.comment || ''"
+                      ></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Indexes & Constraints -->
+            <div
+              class="relative min-h-0 flex-1 overflow-auto p-4"
+              x-show="inspectorTab() === 'indexes'"
+              x-cloak
+            >
+              <div
+                class="flex h-full items-center justify-center text-sm text-slate-400"
+                x-show="activeTableView()?.meta?.loading"
+              >
+                Loading indexes…
+              </div>
+              <div
+                class="rounded border border-rose-700/50 bg-rose-950/40 px-4 py-3 text-xs text-rose-300"
+                x-show="activeTableView()?.meta?.error"
+                x-text="activeTableView()?.meta?.error"
+              ></div>
+              <div
+                class="space-y-4"
+                x-show="!activeTableView()?.meta?.loading && !activeTableView()?.meta?.error"
+              >
+                <div>
+                  <h3
+                    class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400"
+                  >
+                    Indexes
+                  </h3>
+                  <div
+                    class="overflow-hidden rounded border border-surface-700"
+                  >
+                    <table class="min-w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr class="bg-surface-800">
+                          <th
+                            class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                          >
+                            Name
+                          </th>
+                          <th
+                            class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                          >
+                            Type
+                          </th>
+                          <th
+                            class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                          >
+                            Flags
+                          </th>
+                          <th
+                            class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                          >
+                            Columns
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template
+                          x-for="idx in (activeTableView()?.meta?.indexes || [])"
+                          :key="idx.name"
+                        >
+                          <tr class="odd:bg-surface-900/40">
+                            <td
+                              class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-slate-100"
+                              x-text="idx.name"
+                            ></td>
+                            <td
+                              class="border-b border-surface-700/40 px-3 py-1.5 text-slate-300"
+                              x-text="idx.type"
+                            ></td>
+                            <td
+                              class="border-b border-surface-700/40 px-3 py-1.5 text-slate-300"
+                            >
+                              <span
+                                x-show="idx.primary"
+                                class="mr-1 rounded bg-amber-900/40 px-1.5 py-0.5 text-amber-200"
+                                >PRIMARY</span
+                              >
+                              <span
+                                x-show="!idx.primary && idx.unique"
+                                class="rounded bg-sky-900/40 px-1.5 py-0.5 text-sky-200"
+                                >UNIQUE</span
+                              >
+                            </td>
+                            <td
+                              class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-slate-300"
+                              x-text="(idx.columns || []).join(', ')"
+                            ></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                    <div
+                      class="px-3 py-2 text-xs text-slate-500"
+                      x-show="!(activeTableView()?.meta?.indexes || []).length"
+                    >
+                      No indexes
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3
+                    class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400"
+                  >
+                    Foreign keys
+                  </h3>
+                  <div
+                    class="overflow-hidden rounded border border-surface-700"
+                  >
+                    <table class="min-w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr class="bg-surface-800">
+                          <th
+                            class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                          >
+                            Name
+                          </th>
+                          <th
+                            class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                          >
+                            Column
+                          </th>
+                          <th
+                            class="border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                          >
+                            References
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template
+                          x-for="fk in (activeTableView()?.meta?.foreignKeys || [])"
+                          :key="`${fk.name}-${fk.column}`"
+                        >
+                          <tr class="odd:bg-surface-900/40">
+                            <td
+                              class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-slate-100"
+                              x-text="fk.name"
+                            ></td>
+                            <td
+                              class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-slate-300"
+                              x-text="fk.column"
+                            ></td>
+                            <td
+                              class="border-b border-surface-700/40 px-3 py-1.5 font-mono text-emerald-300"
+                              x-text="`${fk.referenced_table}.${fk.referenced_column}`"
+                            ></td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                    <div
+                      class="px-3 py-2 text-xs text-slate-500"
+                      x-show="!(activeTableView()?.meta?.foreignKeys || []).length"
+                    >
+                      No foreign keys
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DDL -->
+            <div
+              class="relative min-h-0 flex-1 overflow-auto p-4"
+              x-show="inspectorTab() === 'ddl'"
+              x-cloak
+            >
+              <div
+                class="flex h-full items-center justify-center text-sm text-slate-400"
+                x-show="activeTableView()?.meta?.loading"
+              >
+                Loading DDL…
+              </div>
+              <div
+                class="rounded border border-rose-700/50 bg-rose-950/40 px-4 py-3 text-xs text-rose-300"
+                x-show="activeTableView()?.meta?.error"
+                x-text="activeTableView()?.meta?.error"
+              ></div>
+              <pre
+                class="whitespace-pre-wrap break-words rounded border border-surface-700 bg-surface-950/60 p-4 font-mono text-xs text-slate-200"
+                x-show="!activeTableView()?.meta?.loading && !activeTableView()?.meta?.error"
+                x-text="activeTableView()?.meta?.createSql || 'No CREATE statement returned'"
+              ></pre>
+            </div>
+
+            <!-- Status bar (sticky at the bottom of the grid) -->
+            <div
+              class="flex items-center gap-3 border-t border-surface-700 bg-surface-800/60 px-3 py-1.5 text-xs text-slate-400"
+              x-show="inspectorTab() === 'data'"
+            >
+              <span
+                class="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-500"
+                x-show="!activeTableView()?.error"
+                :title="activeTableView()?.sql"
+                x-text="activeTableView()?.sql"
+              ></span>
+              <span
+                class="min-w-0 flex-1 truncate text-rose-300"
+                x-show="activeTableView()?.error"
+                :title="activeTableView()?.error"
+                x-text="activeTableView()?.error"
+              ></span>
+
+              <div class="ml-auto flex shrink-0 items-center gap-3">
+                <label
+                  class="flex items-center gap-1.5"
+                  title="Rows loaded per page (does not change the saved connection limit)"
+                >
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    class="w-16 rounded border border-surface-600 bg-surface-900 px-1.5 py-0.5 text-right text-xs text-slate-200 outline-none focus:border-sky-500"
+                    :value="activeTableView()?.limitInput ?? ''"
+                    @input="setPageLimit($event.target.value)"
+                    @change="commitPageLimit($event.target.value)"
+                    @keydown.enter.prevent="commitPageLimit($event.target.value)"
+                  />
+                  <span>rows/page</span>
+                </label>
+                <span>
+                  <span
+                    class="text-slate-200"
+                    x-text="gridRows().length"
+                  ></span>
+                  <span> loaded rows</span>
+                </span>
+                <span
+                  class="text-slate-200"
+                  x-show="activeTableView()?.durationMs != null"
+                  x-text="`${activeTableView()?.durationMs} ms`"
+                ></span>
+                <span class="text-slate-500" x-show="activeTableView()?.loading"
+                  >Loading…</span
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- SQL query editor (Chunk 6) -->
+          <div
+            class="flex min-h-0 flex-1 flex-col"
+            x-show="activeSession && editorMode() === 'sql'"
+            x-cloak
+            x-effect="editorSyncEffect()"
+          >
+            <!-- Query tabs + run toolbar -->
+            <div
+              class="flex items-center gap-1 border-b border-surface-700 px-2 py-1.5"
+            >
+              <div
+                class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+              >
+                <template
+                  x-for="tab in (activeSession?.queryTabs || [])"
+                  :key="tab.id"
+                >
+                  <div
+                    class="group flex shrink-0 cursor-pointer items-center gap-1.5 rounded-t border-b-2 px-3 py-1 text-xs"
+                    :class="tab.id === activeSession.activeTabId
+                      ? 'text-white'
+                      : 'text-slate-400 hover:bg-surface-800/60'"
+                    :style="queryTabStyle(tab)"
+                    @click="switchQueryTab(tab.id)"
+                    @dblclick.stop="startRenameTab(tab)"
+                    :title="tab.fileId ? 'Double-click to rename · close deletes the saved file' : 'Double-click to rename'"
+                  >
+                    <span
+                      class="h-2 w-2 shrink-0 rounded-full"
+                      :style="`background:${themeOf(activeSession?.connection)}`"
+                    ></span>
+                    <template x-if="!tab.renaming">
+                      <span
+                        class="max-w-[10rem] truncate"
+                        x-text="tabLabel(tab)"
+                      ></span>
+                    </template>
+                    <template x-if="tab.renaming">
+                      <input
+                        type="text"
+                        class="w-28 rounded border bg-surface-900 px-1 py-0.5 text-xs text-white outline-none"
+                        :style="queryTabRenameStyle()"
+                        :data-rename-tab="tab.id"
+                        x-model="tab.renameDraft"
+                        @click.stop
+                        @keydown.enter.prevent="commitRenameTab(tab)"
+                        @keydown.escape.prevent="cancelRenameTab(tab)"
+                        @blur="commitRenameTab(tab)"
+                      />
+                    </template>
+                    <button
+                      type="button"
+                      class="rounded px-1 text-slate-500 opacity-60 hover:bg-surface-700 hover:text-slate-200 group-hover:opacity-100"
+                      :title="tab.fileId ? 'Delete saved script' : 'Close tab'"
+                      @click.stop="closeQueryTab(tab.id)"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </template>
+                <button
+                  type="button"
+                  class="shrink-0 rounded px-2 py-1 text-sm text-slate-400 hover:bg-surface-800 hover:text-white"
+                  title="New unsaved script tab"
+                  @click="addQueryTab()"
+                >
+                  +
+                </button>
+              </div>
+
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="text-[11px] text-slate-500">
+                  Runs on
+                  <span
+                    class="font-mono text-slate-300"
+                    x-text="activeSession?.activeDatabase || '(no database)'"
+                  ></span>
+                  <span
+                    class="ml-1 text-slate-600"
+                    x-show="sqlCompletionLoading"
+                    >· schema…</span
+                  >
+                  <span
+                    class="ml-1 text-slate-600"
+                    x-show="!sqlCompletionLoading && activeSession?.activeDatabase && sqlCompletionCount > 0"
+                    x-text="`· ${sqlCompletionCount} tables`"
+                  ></span>
+                </span>
+                <button
+                  type="button"
+                  class="rounded border border-surface-600 px-2.5 py-1 text-xs text-slate-200 hover:bg-surface-700 disabled:opacity-50"
+                  title="SQL autocomplete (⌘/Ctrl+Space)"
+                  :disabled="activeQueryTab()?.running"
+                  @click="openSqlHints()"
+                >
+                  Hints
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-surface-600 px-2.5 py-1 text-xs text-slate-200 hover:bg-surface-700 disabled:opacity-50"
+                  title="Format SQL (⌘/Ctrl+Shift+F)"
+                  :disabled="activeQueryTab()?.running"
+                  @click="formatActiveSql()"
+                >
+                  Format
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-surface-600 px-2.5 py-1 text-xs text-slate-200 hover:bg-surface-700 disabled:opacity-50"
+                  title="Save script file (⌘/Ctrl+S)"
+                  x-show="showSaveButton()"
+                  :disabled="activeQueryTab()?.running"
+                  @click="saveActiveScript()"
+                >
+                  <span x-text="saveButtonLabel()"></span>
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                  title="Run the statement under the cursor (semicolon-separated). Selection runs as-is."
+                  :disabled="activeQueryTab()?.running"
+                  @click="executeSql()"
+                >
+                  <svg
+                    class="h-3.5 w-3.5"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  <span
+                    x-text="activeQueryTab()?.running ? 'Running…' : 'Run'"
+                  ></span>
+                  <span class="text-emerald-200/70">⌘/Ctrl+↵</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Editor + results split (height not persisted across refresh) -->
+            <div id="sql-split-body" class="flex min-h-0 flex-1 flex-col">
+              <div
+                class="min-h-[100px] overflow-hidden"
+                :style="sqlEditorPaneStyle()"
+              >
+                <div
+                  id="sql-editor-host"
+                  class="h-full"
+                  x-init="$nextTick(() => mountSqlEditor())"
+                ></div>
+              </div>
+
+              <div
+                class="sql-split-handle border-y border-surface-700"
+                :class="sqlSplitDragging ? 'is-dragging' : ''"
+                title="Drag to resize editor / results (resets on refresh)"
+                @mousedown="startSqlSplitResize($event)"
+              ></div>
+
+              <!-- Results -->
+              <div class="relative flex min-h-[80px] flex-1 flex-col">
+                <div
+                  class="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500"
+                  x-show="!activeQueryTab()?.result && !activeQueryTab()?.error && !activeQueryTab()?.running"
+                >
+                  Write SQL and press ⌘/Ctrl+Space for autocomplete (keywords,
+                  tables, columns). Run executes the statement under the cursor
+                  — or the selection. Drag the bar above to resize. Format
+                  ⌘/Ctrl+Shift+F · Save ⌘/Ctrl+S.
+                </div>
+
+                <div
+                  class="flex h-full items-center justify-center text-sm text-slate-400"
+                  x-show="activeQueryTab()?.running"
+                >
+                  Executing…
+                </div>
+
+                <div
+                  class="m-4 rounded border border-rose-700/50 bg-rose-950/40 px-4 py-3 font-mono text-xs text-rose-300"
+                  x-show="activeQueryTab()?.error"
+                  x-text="activeQueryTab()?.error"
+                ></div>
+
+                <!-- OK packet (INSERT/UPDATE/DELETE/DDL) -->
+                <div
+                  class="m-4 rounded border border-emerald-700/40 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300"
+                  x-show="!activeQueryTab()?.running && activeQueryTab()?.result?.kind === 'ok'"
+                >
+                  <span
+                    x-text="`Success · ${activeQueryTab()?.result?.affectedRows ?? 0} row(s) affected`"
+                  ></span>
+                  <span
+                    x-show="activeQueryTab()?.result?.insertId"
+                    x-text="` · insertId ${activeQueryTab()?.result?.insertId}`"
+                  ></span>
+                </div>
+
+                <!-- Export bar stays outside the horizontal scroll area -->
+                <div
+                  class="flex shrink-0 items-center justify-end gap-2 border-b border-surface-700 bg-surface-900/95 px-3 py-1.5"
+                  x-show="!activeQueryTab()?.running && activeQueryTab()?.result?.kind === 'rows' && activeQueryTab()?.result?.columns?.length"
+                >
+                  <span class="mr-auto text-[11px] text-slate-500">Export</span>
+                  <button
+                    type="button"
+                    class="rounded border border-surface-600 px-2 py-0.5 text-xs text-slate-300 hover:bg-surface-700"
+                    title="Quick download loaded rows as CSV"
+                    @click="quickExportLoaded('sql', 'csv')"
+                  >
+                    CSV
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded border border-surface-600 px-2 py-0.5 text-xs text-slate-300 hover:bg-surface-700"
+                    title="Quick download loaded rows as JSON"
+                    @click="quickExportLoaded('sql', 'json')"
+                  >
+                    JSON
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded border border-sky-700/60 bg-sky-950/40 px-2 py-0.5 text-xs text-sky-200 hover:bg-sky-900/50"
+                    title="Batched export — all rows, file naming, data/exports/"
+                    @click="openExportModal({ source: 'sql' })"
+                  >
+                    Export…
+                  </button>
+                </div>
+
+                <!-- Scrollable result grid (lazy-renders rows on scroll) -->
+                <div
+                  class="relative min-h-0 flex-1 overflow-auto"
+                  x-show="!activeQueryTab()?.running && activeQueryTab()?.result?.kind === 'rows' && activeQueryTab()?.result?.columns?.length"
+                  @scroll.passive="onQueryResultScroll($event)"
+                >
+                  <table class="min-w-full border-collapse text-left text-xs">
+                    <thead class="sticky top-0 z-10">
+                      <tr class="bg-surface-800">
+                        <th
+                          class="sticky left-0 z-20 border-b border-r border-surface-700 bg-surface-800 px-2 py-2 font-medium text-slate-500"
+                        >
+                          #
+                        </th>
+                        <template
+                          x-for="col in (activeQueryTab()?.result?.columns || [])"
+                          :key="col"
+                        >
+                          <th
+                            class="whitespace-nowrap border-b border-surface-700 px-3 py-2 font-semibold text-slate-200"
+                            x-text="col"
+                          ></th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template
+                        x-for="(row, rowIndex) in queryResultRows()"
+                        :key="rowIndex"
+                      >
+                        <tr
+                          class="odd:bg-surface-900/40 even:bg-surface-800/20 hover:bg-surface-700/40"
+                        >
+                          <td
+                            class="sticky left-0 z-[1] border-r border-surface-700/60 bg-surface-900 px-2 py-1.5 font-mono text-slate-500"
+                            x-text="rowIndex + 1"
+                          ></td>
+                          <template
+                            x-for="col in (activeQueryTab()?.result?.columns || [])"
+                            :key="col"
+                          >
+                            <td
+                              class="max-w-xs truncate whitespace-nowrap border-b border-surface-700/40 px-3 py-1.5 font-mono"
+                              :class="isNullCell(row[col]) ? 'italic text-slate-600' : 'text-slate-200'"
+                              :title="formatCell(row[col])"
+                              x-text="formatCell(row[col])"
+                            ></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+
+                  <div
+                    class="sticky bottom-0 flex justify-center bg-surface-900/90 px-3 py-2 text-xs text-slate-400"
+                    x-show="activeQueryTab()?.resultLoadingMore"
+                  >
+                    Loading more rows…
+                  </div>
+
+                  <div
+                    class="flex h-40 items-center justify-center text-sm text-slate-500"
+                    x-show="queryResultTotal() === 0"
+                  >
+                    Query returned no rows
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SQL editor status bar -->
+            <div
+              class="flex items-center gap-3 border-t border-surface-700 bg-surface-800/60 px-3 py-1.5 text-xs text-slate-400"
+            >
+              <span
+                class="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-500"
+                :title="activeQueryTab()?.result?.sql"
+                x-text="activeQueryTab()?.result?.sql || ''"
+              ></span>
+              <span
+                class="shrink-0 rounded bg-amber-900/40 px-1.5 py-0.5 text-amber-300"
+                x-show="activeQueryTab()?.result?.limited"
+                >auto LIMIT</span
+              >
+              <span
+                class="shrink-0"
+                x-show="activeQueryTab()?.result?.kind === 'rows'"
+              >
+                <span class="text-slate-200" x-text="queryResultTotal()"></span>
+                <span> loaded rows</span>
+                <span class="text-slate-500" x-show="queryResultHasMore()">
+                  · more available</span
+                >
+              </span>
+              <span
+                class="shrink-0 text-slate-200"
+                x-show="activeQueryTab()?.durationMs != null"
+                x-text="`${activeQueryTab()?.durationMs} ms`"
+              ></span>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Add / Edit modal -->
+    <div
+      x-show="modalOpen"
+      x-cloak
+      class="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+      @keydown.escape.window="closeModal()"
+    >
+      <div
+        class="w-full max-w-lg rounded-lg border border-surface-600 bg-surface-800 shadow-xl"
+        @click.outside="closeModal()"
+      >
+        <div
+          class="flex items-center justify-between border-b border-surface-700 px-4 py-3"
+        >
+          <h2
+            class="text-sm font-semibold text-white"
+            x-text="form.id ? 'Edit Connection' : 'New Connection'"
+          ></h2>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-white"
+            @click="closeModal()"
+          >
+            ✕
+          </button>
+        </div>
+        <form class="space-y-3 p-4" @submit.prevent="saveConnection()">
+          <div>
+            <label class="mb-1 block text-xs text-slate-400">Nickname</label>
+            <input
+              x-model="form.nickname"
+              required
+              class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+              placeholder="Local / Stage / Prod"
+            />
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="col-span-2">
+              <label class="mb-1 block text-xs text-slate-400">Host</label>
+              <input
+                x-model="form.host"
+                required
+                class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs text-slate-400">Port</label>
+              <input
+                x-model.number="form.port"
+                type="number"
+                min="1"
+                max="65535"
+                required
+                class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-xs text-slate-400">User</label>
+              <input
+                x-model="form.user"
+                required
+                class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs text-slate-400">
+                Password
+                <span class="text-slate-500" x-show="form.id"
+                  >(blank = keep)</span
+                >
+              </label>
+              <input
+                x-model="form.password"
+                type="password"
+                class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+                autocomplete="new-password"
+              />
+            </div>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-slate-400"
+              >Default database (optional)</label
+            >
+            <input
+              x-model="form.database_name"
+              class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+            />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-slate-400">Theme color</label>
+            <div class="flex items-center gap-3">
+              <input
+                x-model="form.theme_color"
+                type="color"
+                class="h-9 w-12 cursor-pointer rounded border border-surface-600 bg-surface-900"
+              />
+              <input
+                x-model="form.theme_color"
+                class="flex-1 rounded border border-surface-600 bg-surface-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-slate-400"
+              >Rows per lazy-load page</label
+            >
+            <input
+              x-model.number="form.row_limit"
+              type="number"
+              min="10"
+              max="1000"
+              required
+              class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+            />
+            <p class="mt-1 text-[11px] text-slate-500">
+              Default 100. More rows load when the grid reaches the bottom.
+            </p>
+          </div>
+          <div class="rounded border border-surface-700 bg-surface-900/50 p-3">
+            <label class="flex items-start gap-2 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                class="mt-0.5 rounded border-surface-600 bg-surface-900 text-sky-500 focus:ring-sky-500"
+                x-model="form.keep_alive"
+              />
+              <span>
+                <span class="font-medium">Keep connection alive</span>
+                <span class="mt-0.5 block text-xs text-slate-400">
+                  While connected, ping the server on an interval so idle
+                  sessions are less likely to drop.
+                </span>
+              </span>
+            </label>
+            <div class="mt-3" x-show="form.keep_alive" x-cloak>
+              <label class="mb-1 block text-xs text-slate-400"
+                >Ping every (seconds)</label
+              >
+              <input
+                x-model.number="form.keep_alive_interval_sec"
+                type="number"
+                min="15"
+                max="3600"
+                required
+                class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+              />
+              <p class="mt-1 text-[11px] text-slate-500">
+                Default 120. Allowed range: 15–3600 seconds.
+              </p>
+            </div>
+          </div>
+          <div
+            class="flex items-center justify-between gap-2 border-t border-surface-700 pt-3"
+          >
+            <button
+              type="button"
+              class="rounded border border-surface-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-surface-700 disabled:opacity-50"
+              :disabled="testing || saving"
+              @click="testConnectivity()"
+            >
+              <span x-text="testing ? 'Testing…' : 'Test Connectivity'"></span>
+            </button>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-surface-700"
+                @click="closeModal()"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+                :disabled="saving || testing"
+              >
+                <span x-text="saving ? 'Saving…' : 'Save'"></span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Font / display settings -->
+    <div
+      x-show="settingsOpen"
+      x-cloak
+      class="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+      @keydown.escape.window="closeSettings()"
+    >
+      <div
+        class="w-full max-w-md rounded-lg border border-surface-600 bg-surface-800 shadow-xl"
+        @click.outside="closeSettings()"
+      >
+        <div
+          class="flex items-center justify-between border-b border-surface-700 px-4 py-3"
+        >
+          <h2 class="text-sm font-semibold text-white">Settings</h2>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-white"
+            @click="closeSettings()"
+          >
+            ✕
+          </button>
+        </div>
+        <form class="space-y-4 p-4" @submit.prevent="saveSettings()">
+          <div>
+            <p
+              class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400"
+            >
+              UI
+            </p>
+            <label class="mb-1 block text-xs text-slate-400">Font family</label>
+            <div class="relative mb-3">
+              <button
+                type="button"
+                class="flex w-full items-center justify-between rounded border border-surface-600 bg-surface-900 px-3 py-2 text-left text-sm text-white outline-none hover:border-sky-500"
+                :style="`font-family:${settingsForm.ui_font_family}`"
+                @click="uiFontMenuOpen = !uiFontMenuOpen; editorFontMenuOpen = false"
+              >
+                <span
+                  x-text="fontOptionLabel(uiFontOptions, settingsForm.ui_font_family)"
+                ></span>
+                <span class="text-slate-500">▾</span>
+              </button>
+              <div
+                x-show="uiFontMenuOpen"
+                x-cloak
+                class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded border border-surface-600 bg-surface-900 py-1 shadow-xl"
+                @click.outside="uiFontMenuOpen = false"
+              >
+                <template x-for="opt in uiFontOptions" :key="opt.id">
+                  <button
+                    type="button"
+                    class="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-surface-700"
+                    :class="settingsForm.ui_font_family === opt.id ? 'bg-surface-700 text-white' : ''"
+                    :style="`font-family:${opt.id}`"
+                    @click="selectUiFont(opt)"
+                    x-text="opt.label"
+                  ></button>
+                </template>
+              </div>
+            </div>
+            <label class="mb-1 block text-xs text-slate-400"
+              >Font size (px)</label
+            >
+            <input
+              type="number"
+              min="10"
+              max="24"
+              class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+              x-model="settingsForm.ui_font_size"
+              @input="previewSettingsForm()"
+            />
+            <p
+              class="mt-2 rounded border border-surface-700 bg-surface-900/60 px-3 py-2 text-slate-200"
+              :style="`font-family:${settingsForm.ui_font_family}; font-size:${settingsForm.ui_font_size}px`"
+            >
+              UI preview — The quick brown fox jumps over the lazy dog.
+            </p>
+          </div>
+          <div>
+            <p
+              class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400"
+            >
+              SQL editor
+            </p>
+            <label class="mb-1 block text-xs text-slate-400">Font family</label>
+            <div class="relative mb-3">
+              <button
+                type="button"
+                class="flex w-full items-center justify-between rounded border border-surface-600 bg-surface-900 px-3 py-2 text-left text-sm text-white outline-none hover:border-sky-500"
+                :style="`font-family:${settingsForm.editor_font_family}`"
+                @click="editorFontMenuOpen = !editorFontMenuOpen; uiFontMenuOpen = false"
+              >
+                <span
+                  x-text="fontOptionLabel(editorFontOptions, settingsForm.editor_font_family)"
+                ></span>
+                <span class="text-slate-500">▾</span>
+              </button>
+              <div
+                x-show="editorFontMenuOpen"
+                x-cloak
+                class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded border border-surface-600 bg-surface-900 py-1 shadow-xl"
+                @click.outside="editorFontMenuOpen = false"
+              >
+                <template x-for="opt in editorFontOptions" :key="opt.id">
+                  <button
+                    type="button"
+                    class="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-surface-700"
+                    :class="settingsForm.editor_font_family === opt.id ? 'bg-surface-700 text-white' : ''"
+                    :style="`font-family:${opt.id}`"
+                    @click="selectEditorFont(opt)"
+                    x-text="opt.label"
+                  ></button>
+                </template>
+              </div>
+            </div>
+            <label class="mb-1 block text-xs text-slate-400"
+              >Font size (px)</label
+            >
+            <input
+              type="number"
+              min="10"
+              max="24"
+              class="w-full rounded border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white outline-none focus:border-sky-500"
+              x-model="settingsForm.editor_font_size"
+              @input="previewSettingsForm()"
+            />
+            <p
+              class="mt-2 rounded border border-surface-700 bg-surface-900/60 px-3 py-2 text-slate-200"
+              :style="`font-family:${settingsForm.editor_font_family}; font-size:${settingsForm.editor_font_size}px`"
+            >
+              SELECT id, name FROM users WHERE active = 1;
+            </p>
+          </div>
+          <p class="text-[11px] text-slate-500">
+            Saved in local config (`data/config/client_config.db`).
+          </p>
+          <div class="flex justify-end gap-2 border-t border-surface-700 pt-3">
+            <button
+              type="button"
+              class="rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-surface-700"
+              @click="closeSettings()"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+              :disabled="settingsSaving"
+              x-text="settingsSaving ? 'Saving…' : 'Save'"
+            ></button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Query history slide-over -->
+    <div
+      x-show="historyOpen"
+      x-cloak
+      class="fixed inset-0 z-40"
+      @keydown.escape.window="closeHistoryPanel()"
+    >
+      <div
+        class="absolute inset-0 bg-black/50"
+        @click="closeHistoryPanel()"
+      ></div>
+      <aside
+        class="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-surface-600 bg-surface-800 shadow-2xl"
+        @click.stop
+      >
+        <div
+          class="flex items-center justify-between border-b border-surface-700 px-4 py-3"
+        >
+          <div>
+            <h2 class="text-sm font-semibold text-white">Query history</h2>
+            <p
+              class="text-xs text-slate-400"
+              x-text="activeSession ? `For ${activeSession.connection.nickname}` : 'Select a connection'"
+            ></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded border border-surface-600 px-2 py-1 text-[11px] font-medium text-slate-300 hover:bg-surface-700"
+              title="Toggle UTC / local time (24-hour)"
+              @click="toggleHistoryTimeZone()"
+            >
+              <span x-text="historyTimeUtc ? 'UTC' : 'Local'"></span>
+            </button>
+            <button
+              type="button"
+              class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-300 hover:bg-surface-700 disabled:opacity-40"
+              :disabled="!historyItems.length"
+              @click="clearHistory()"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              class="text-slate-400 hover:text-white"
+              @click="closeHistoryPanel()"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div class="min-h-0 flex-1 overflow-auto p-3">
+          <div
+            class="py-8 text-center text-sm text-slate-400"
+            x-show="historyLoading"
+          >
+            Loading…
+          </div>
+          <div
+            class="py-8 text-center text-sm text-slate-500"
+            x-show="!historyLoading && !historyItems.length"
+          >
+            No history yet. Run a query to record one.
+          </div>
+          <div
+            class="space-y-2"
+            x-show="!historyLoading && historyItems.length"
+          >
+            <template x-for="item in historyItems" :key="item.id">
+              <div
+                class="rounded border border-surface-700 bg-surface-900/50 p-3"
+              >
+                <div class="mb-1.5 flex items-center gap-2 text-[11px]">
+                  <span
+                    class="rounded px-1.5 py-0.5 font-medium"
+                    :class="item.status === 'error' ? 'bg-rose-900/50 text-rose-300' : 'bg-emerald-900/40 text-emerald-300'"
+                    x-text="item.status === 'error' ? 'error' : 'ok'"
+                  ></span>
+                  <span
+                    class="font-mono text-slate-500"
+                    :title="historyTimeUtc ? 'UTC' : 'Local time'"
+                    x-text="formatHistoryTime(item.created_at)"
+                  ></span>
+                  <span
+                    class="text-slate-500"
+                    x-show="item.duration_ms != null"
+                    x-text="`${item.duration_ms} ms`"
+                  ></span>
+                  <button
+                    type="button"
+                    class="ml-auto text-slate-500 hover:text-rose-300"
+                    title="Delete"
+                    @click="deleteHistoryItem(item.id)"
+                  >
+                    ×
+                  </button>
+                </div>
+                <pre
+                  class="mb-2 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-slate-200"
+                  x-text="historyPreview(item.sql_text)"
+                ></pre>
+                <p
+                  class="mb-2 text-[11px] text-rose-300"
+                  x-show="item.error_message"
+                  x-text="item.error_message"
+                ></p>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-200 hover:bg-surface-700"
+                    @click="useHistorySql(item, { run: false })"
+                  >
+                    Load
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-600"
+                    @click="useHistorySql(item, { run: true })"
+                  >
+                    Re-run
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Rich export modal -->
+    <div
+      x-show="exportOpen"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      @keydown.escape.window="closeExportModal()"
+    >
+      <div
+        class="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-surface-600 bg-surface-800 shadow-2xl"
+        @click.stop
+      >
+        <div
+          class="flex items-center justify-between border-b border-surface-700 px-4 py-3"
+        >
+          <div>
+            <h2 class="text-sm font-semibold text-white">Export</h2>
+            <p class="text-xs text-slate-400">
+              Batch rows, name files, save under
+              <span class="font-mono text-slate-300">data/exports/</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-white disabled:opacity-40"
+            :disabled="exportRunning"
+            @click="closeExportModal()"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div
+          class="min-h-0 flex-1 space-y-4 overflow-auto p-4"
+          x-show="exportOpen"
+        >
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-xs text-slate-400">
+              Format
+              <select
+                class="mt-1 w-full rounded border border-surface-600 bg-surface-900 px-2 py-1.5 text-sm text-slate-200"
+                x-model="exportForm.format"
+              >
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
+              </select>
+            </label>
+            <label class="block text-xs text-slate-400">
+              Scope
+              <select
+                class="mt-1 w-full rounded border border-surface-600 bg-surface-900 px-2 py-1.5 text-sm text-slate-200"
+                x-model="exportForm.scope"
+              >
+                <option
+                  value="loaded"
+                  x-text="`Loaded rows (${exportMeta?.loadedCount || 0})`"
+                ></option>
+                <option value="all">All matching rows (server)</option>
+              </select>
+            </label>
+            <label class="block text-xs text-slate-400">
+              Batch size (rows)
+              <input
+                type="number"
+                min="100"
+                max="10000"
+                step="100"
+                class="mt-1 w-full rounded border border-surface-600 bg-surface-900 px-2 py-1.5 font-mono text-sm text-slate-200"
+                x-model.number="exportForm.batchSize"
+              />
+            </label>
+            <label class="block text-xs text-slate-400">
+              Files
+              <select
+                class="mt-1 w-full rounded border border-surface-600 bg-surface-900 px-2 py-1.5 text-sm text-slate-200"
+                x-model="exportForm.fileMode"
+              >
+                <option value="single">One file (all batches)</option>
+                <option value="per_batch">Separate file per batch</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="block text-xs text-slate-400">
+            Base file name
+            <input
+              type="text"
+              class="mt-1 w-full rounded border border-surface-600 bg-surface-900 px-2 py-1.5 font-mono text-sm text-slate-200"
+              placeholder="my_export"
+              x-model="exportForm.baseName"
+            />
+            <span class="mt-1 block text-[11px] text-slate-500">
+              <span
+                x-show="exportForm.fileMode === 'single'"
+                x-text="`${exportForm.baseName || 'export'}.${exportForm.format}`"
+              ></span>
+              <span
+                x-show="exportForm.fileMode === 'per_batch'"
+                x-text="`${exportForm.baseName || 'export'}_part001.${exportForm.format}, …`"
+              ></span>
+            </span>
+          </label>
+
+          <label class="block text-xs text-slate-400">
+            Folder under <span class="font-mono">data/exports/</span>
+            <input
+              type="text"
+              class="mt-1 w-full rounded border border-surface-600 bg-surface-900 px-2 py-1.5 font-mono text-sm text-slate-200"
+              placeholder="reports/today (optional)"
+              x-model="exportForm.relativePath"
+            />
+            <span class="mt-1 block break-all text-[11px] text-slate-500">
+              Saves to
+              <span
+                class="font-mono text-slate-400"
+                x-text="(exportMeta?.exportRoot || 'data/exports') + (exportForm.relativePath ? '/' + exportForm.relativePath.replace(/^\/+|\/+$/g, '') : '')"
+              ></span>
+            </span>
+          </label>
+
+          <p
+            class="rounded border border-surface-700 bg-surface-900/50 px-3 py-2 text-[11px] text-slate-400"
+          >
+            Single-batch single file also triggers a browser download. Multiple
+            files, or one file built from multiple batches, stay in
+            <span class="font-mono text-slate-300">data/exports/</span> and are
+            listed below.
+            <span
+              class="mt-1 block text-slate-500"
+              x-show="exportForm.scope === 'loaded' && estimatedExportBatches()"
+              x-text="`≈ ${estimatedExportBatches()} batch(es) from loaded rows`"
+            ></span>
+          </p>
+
+          <p
+            class="text-sm text-rose-300"
+            x-show="exportError"
+            x-text="exportError"
+          ></p>
+
+          <div
+            class="rounded border border-emerald-800/50 bg-emerald-950/30 p-3"
+            x-show="exportResult"
+          >
+            <div class="mb-2 flex items-start justify-between gap-2">
+              <div>
+                <p class="text-sm font-medium text-emerald-200">
+                  Export complete
+                </p>
+                <p
+                  class="text-[11px] text-emerald-300/80"
+                  x-text="`${exportResult?.totalRows ?? 0} rows · ${exportResult?.batchCount ?? 0} batch(es) · ${exportResult?.files?.length ?? 0} file(s)`"
+                ></p>
+              </div>
+              <button
+                type="button"
+                class="shrink-0 text-[11px] text-sky-300 hover:underline"
+                @click="copyExportPath(exportResult?.absoluteDir)"
+              >
+                Copy folder path
+              </button>
+            </div>
+            <p
+              class="mb-2 break-all font-mono text-[10px] text-slate-400"
+              x-text="exportResult?.absoluteDir"
+            ></p>
+            <ul class="max-h-40 space-y-1.5 overflow-auto">
+              <template
+                x-for="file in (exportResult?.files || [])"
+                :key="file.relativePath"
+              >
+                <li
+                  class="flex items-center gap-2 rounded border border-surface-700/80 bg-surface-900/40 px-2 py-1.5 text-xs"
+                >
+                  <div class="min-w-0 flex-1">
+                    <p
+                      class="truncate font-mono text-slate-200"
+                      x-text="file.name"
+                    ></p>
+                    <p
+                      class="text-[10px] text-slate-500"
+                      x-text="`${exportFormatBytes(file.sizeBytes)} · ${file.rows ?? '—'} rows`"
+                    ></p>
+                  </div>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded border border-surface-600 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-surface-700"
+                    @click="downloadExportFile(file.relativePath)"
+                  >
+                    Download
+                  </button>
+                  <button
+                    type="button"
+                    class="shrink-0 text-[11px] text-slate-400 hover:text-sky-300"
+                    title="Copy absolute path"
+                    @click="copyExportPath(file.absolutePath)"
+                  >
+                    Path
+                  </button>
+                </li>
+              </template>
+            </ul>
+          </div>
+
+          <div>
+            <div class="mb-1.5 flex items-center justify-between">
+              <h3 class="text-xs font-medium text-slate-400">
+                Recent files in data/exports/
+              </h3>
+              <button
+                type="button"
+                class="text-[11px] text-sky-400 hover:underline"
+                @click="refreshExportFileList()"
+              >
+                Refresh
+              </button>
+            </div>
+            <div
+              class="max-h-28 overflow-auto rounded border border-surface-700"
+            >
+              <p
+                class="px-2 py-3 text-center text-[11px] text-slate-500"
+                x-show="exportFilesLoading"
+              >
+                Loading…
+              </p>
+              <p
+                class="px-2 py-3 text-center text-[11px] text-slate-500"
+                x-show="!exportFilesLoading && !exportRecentFiles.length"
+              >
+                No export files yet.
+              </p>
+              <ul x-show="!exportFilesLoading && exportRecentFiles.length">
+                <template
+                  x-for="file in exportRecentFiles"
+                  :key="file.relativePath"
+                >
+                  <li
+                    class="flex items-center gap-2 border-b border-surface-700/60 px-2 py-1.5 text-[11px] last:border-0"
+                  >
+                    <span
+                      class="min-w-0 flex-1 truncate font-mono text-slate-300"
+                      x-text="file.relativePath"
+                    ></span>
+                    <span
+                      class="shrink-0 text-slate-500"
+                      x-text="exportFormatBytes(file.sizeBytes)"
+                    ></span>
+                    <button
+                      type="button"
+                      class="shrink-0 text-sky-400 hover:underline"
+                      @click="downloadExportFile(file.relativePath)"
+                    >
+                      Get
+                    </button>
+                  </li>
+                </template>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="flex items-center justify-end gap-2 border-t border-surface-700 px-4 py-3"
+        >
+          <button
+            type="button"
+            class="rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-surface-700 disabled:opacity-40"
+            :disabled="exportRunning"
+            @click="closeExportModal()"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            class="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+            :disabled="exportRunning"
+            @click="runRichExport()"
+          >
+            <span x-show="!exportRunning">Run export</span>
+            <span x-show="exportRunning">Exporting…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Credits / About -->
+    <div
+      x-show="creditsOpen"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      @keydown.escape.window="closeCredits()"
+    >
+      <div
+        class="w-full max-w-md rounded-lg border border-surface-600 bg-surface-800 shadow-2xl"
+        @click.stop
+      >
+        <div
+          class="flex items-center justify-between border-b border-surface-700 px-4 py-3"
+        >
+          <div>
+            <h2
+              class="text-sm font-semibold text-white"
+              x-text="creditsInfo().appName"
+            ></h2>
+            <p
+              class="text-xs text-slate-400"
+              x-text="creditsInfo().tagline"
+            ></p>
+          </div>
+          <button
+            type="button"
+            class="text-slate-400 hover:text-white"
+            @click="closeCredits()"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="space-y-4 p-4 text-sm">
+          <div>
+            <p class="text-[10px] uppercase tracking-wider text-slate-500">
+              Owner
+            </p>
+            <p
+              class="mt-0.5 font-medium text-white"
+              x-text="creditsInfo().owner"
+            ></p>
+          </div>
+          <ul class="space-y-2 text-xs">
+            <li class="flex items-start gap-2">
+              <span class="w-16 shrink-0 text-slate-500">GitHub</span>
+              <a
+                class="min-w-0 break-all text-sky-400 hover:underline"
+                :href="creditsInfo().github"
+                target="_blank"
+                rel="noopener noreferrer"
+                x-text="creditsInfo().github"
+              ></a>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="w-16 shrink-0 text-slate-500">LinkedIn</span>
+              <a
+                class="min-w-0 break-all text-sky-400 hover:underline"
+                :href="creditsInfo().linkedin"
+                target="_blank"
+                rel="noopener noreferrer"
+                x-text="creditsInfo().linkedin"
+              ></a>
+            </li>
+          </ul>
+        </div>
+        <div class="flex justify-end border-t border-surface-700 px-4 py-3">
+          <button
+            type="button"
+            class="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500"
+            @click="closeCredits()"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete confirm -->
+    <div
+      x-show="deleteConfirmId !== null"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+    >
+      <div
+        class="w-full max-w-sm rounded-lg border border-surface-600 bg-surface-800 p-4 shadow-xl"
+      >
+        <p class="text-sm text-white">
+          Delete this connection? This cannot be undone.
+        </p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded px-3 py-1.5 text-sm text-slate-300 hover:bg-surface-700"
+            @click="deleteConfirmId = null"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="rounded bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500"
+            @click="confirmDelete()"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toasts -->
+    <div
+      class="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-2"
+    >
+      <template x-for="t in toasts" :key="t.id">
+        <div
+          class="pointer-events-auto flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm shadow-xl"
+          :class="{
+            'border-emerald-700/80 bg-emerald-950 text-emerald-100': t.type === 'success',
+            'border-rose-700/80 bg-rose-950 text-rose-100': t.type === 'error',
+            'border-amber-700/80 bg-amber-950 text-amber-100': t.type === 'warning',
+            'border-surface-600 bg-surface-800 text-slate-100': t.type === 'info'
+          }"
+          x-transition.opacity
+        >
+          <span
+            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+            :class="{
+              'bg-emerald-700 text-white': t.type === 'success',
+              'bg-rose-700 text-white': t.type === 'error',
+              'bg-amber-700 text-white': t.type === 'warning',
+              'bg-sky-700 text-white': t.type === 'info'
+            }"
+            x-text="toastIcon(t.type)"
+          ></span>
+          <div class="min-w-0 flex-1">
+            <p
+              class="text-xs font-semibold uppercase tracking-wide opacity-80"
+              x-show="t.title"
+              x-text="t.title"
+            ></p>
+            <p class="leading-snug" x-text="t.message"></p>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 rounded px-1 text-xs opacity-60 hover:opacity-100"
+            title="Dismiss"
+            @click="dismissToast(t.id)"
+          >
+            ✕
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <style>
+      [x-cloak] {
+        display: none !important;
+      }
+
+      /* Firefox */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: #33455f transparent;
+      }
+
+      /* WebKit / Blink */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(15, 20, 25, 0.7);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #33455f;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #4a628a;
+        background-clip: padding-box;
+      }
+      ::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+    </style>
+  </body>
+</html>
