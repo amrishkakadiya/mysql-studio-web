@@ -6,7 +6,7 @@
 
 **Keywords:** MySQL web client, online MySQL GUI, SQL editor, database studio, DBeaver alternative, Node.js MySQL tool, schema explorer, CSV export.
 
-**Owner:** [Amrish Kakadiya](https://github.com/your-username) · Credits in the app sidebar
+**Owner:** [Amrish Kakadiya](https://github.com/amrishkakadiya) · Credits in the app sidebar
 
 ---
 
