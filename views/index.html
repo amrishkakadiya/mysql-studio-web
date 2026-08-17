@@ -1276,6 +1276,15 @@
                     </button>
                     <button
                       type="button"
+                      class="rounded border border-rose-600/70 bg-rose-950/40 px-2 py-1 text-xs text-rose-200 hover:bg-rose-900/50"
+                      title="Cancel the running table load"
+                      x-show="activeTableView()?.loading || activeTableView()?.loadingMore"
+                      @click="cancelTableLoad()"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
                       class="rounded border border-surface-600 px-2 py-1 text-xs text-slate-300 hover:bg-surface-700 disabled:opacity-40"
                       title="Quick download loaded rows as CSV"
                       :disabled="!gridRows().length"
@@ -1357,10 +1366,17 @@
               @scroll.passive="onGridScroll($event)"
             >
               <div
-                class="flex h-full items-center justify-center text-sm text-slate-400"
+                class="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-400"
                 x-show="activeTableView()?.loading"
               >
-                Fetching rows…
+                <span>Fetching rows…</span>
+                <button
+                  type="button"
+                  class="rounded border border-rose-600/70 bg-rose-950/40 px-3 py-1 text-xs text-rose-200 hover:bg-rose-900/50"
+                  @click="cancelTableLoad()"
+                >
+                  Cancel
+                </button>
               </div>
 
               <table
@@ -1895,8 +1911,22 @@
                 </button>
                 <button
                   type="button"
+                  class="inline-flex items-center gap-1.5 rounded border border-rose-600/70 bg-rose-950/40 px-3 py-1 text-xs font-medium text-rose-200 hover:bg-rose-900/50 disabled:opacity-50"
+                  title="Cancel the running query"
+                  x-show="activeQueryTab()?.running"
+                  :disabled="activeQueryTab()?.cancelling"
+                  @click="cancelSql()"
+                >
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 6h12v12H6z" />
+                  </svg>
+                  <span x-text="activeQueryTab()?.cancelling ? 'Cancelling…' : 'Cancel'"></span>
+                </button>
+                <button
+                  type="button"
                   class="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
                   title="Run the statement under the cursor (semicolon-separated). Selection runs as-is."
+                  x-show="!activeQueryTab()?.running"
                   :disabled="activeQueryTab()?.running"
                   @click="executeSql()"
                 >
@@ -1948,10 +1978,17 @@
                 </div>
 
                 <div
-                  class="flex h-full items-center justify-center text-sm text-slate-400"
+                  class="flex h-full flex-col items-center justify-center gap-3 text-sm text-slate-400"
                   x-show="activeQueryTab()?.running"
                 >
-                  Executing…
+                  <span>Executing…</span>
+                  <button
+                    type="button"
+                    class="rounded border border-rose-600/70 bg-rose-950/40 px-3 py-1 text-xs text-rose-200 hover:bg-rose-900/50 disabled:opacity-50"
+                    :disabled="activeQueryTab()?.cancelling"
+                    @click="cancelSql()"
+                    x-text="activeQueryTab()?.cancelling ? 'Cancelling…' : 'Cancel query'"
+                  ></button>
                 </div>
 
                 <div

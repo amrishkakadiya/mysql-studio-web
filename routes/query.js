@@ -11,8 +11,28 @@ const {
   executeQuery,
   fetchTableData,
 } = require('../lib/queryExecutor');
+const activeQueries = require('../lib/activeQueries');
 
 const router = express.Router();
+
+/** Sanitize a client-supplied requestId (used only as a Map key). */
+function normalizeRequestId(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 100) return null;
+  return trimmed;
+}
+
+/**
+ * Kill the tracked query when the client aborts (socket close) before we have
+ * responded. The `settled` guard avoids killing on a normal completed request.
+ */
+function attachAbortKill(req, requestId, isSettled) {
+  if (!requestId) return;
+  req.on('close', () => {
+    if (!isSettled()) void activeQueries.cancel(requestId);
+  });
+}
 
 function recordHistory(entry) {
   try {
@@ -47,6 +67,9 @@ async function requireOpenPool(connectionId) {
  * Without a manual LIMIT on SELECT, results paginate via offset/limit.
  */
 router.post('/execute', async (req, res) => {
+  let settled = false;
+  const requestId = normalizeRequestId(req.body?.requestId);
+  attachAbortKill(req, requestId, () => settled);
   try {
     const {
       connectionId,
@@ -78,6 +101,8 @@ router.post('/execute', async (req, res) => {
         database: database || null,
         limit: pageLimit,
         offset: pageOffset,
+        requestId,
+        connectionId: id,
       });
       // Only the first page is written to history (avoid scroll spam).
       if (pageOffset === 0) {
@@ -90,7 +115,8 @@ router.post('/execute', async (req, res) => {
       }
       res.json({ ...result, configuredLimit });
     } catch (err) {
-      if (pageOffset === 0) {
+      // Cancelled runs are user-initiated; don't log them as failures.
+      if (pageOffset === 0 && !err.cancelled) {
         recordHistory({
           connectionId: id,
           sqlText: sql,
@@ -104,8 +130,11 @@ router.post('/execute', async (req, res) => {
   } catch (err) {
     res.status(err.status || 500).json({
       error: err.message || 'Query failed',
+      cancelled: Boolean(err.cancelled),
       ok: false,
     });
+  } finally {
+    settled = true;
   }
 });
 
@@ -117,6 +146,9 @@ router.post('/execute', async (req, res) => {
  * connection profile default.
  */
 router.post('/table', async (req, res) => {
+  let settled = false;
+  const requestId = normalizeRequestId(req.body?.requestId);
+  attachAbortKill(req, requestId, () => settled);
   try {
     const {
       connectionId,
@@ -156,6 +188,8 @@ router.post('/table', async (req, res) => {
       sortDir,
       filterColumn,
       filterValue: String(filterValue || '').slice(0, 500),
+      requestId,
+      connectionId: id,
     });
     res.json({
       ...result,
@@ -166,9 +200,28 @@ router.post('/table', async (req, res) => {
   } catch (err) {
     res.status(err.status || 500).json({
       error: err.message || 'Failed to load table data',
+      cancelled: Boolean(err.cancelled),
       ok: false,
     });
+  } finally {
+    settled = true;
   }
+});
+
+/**
+ * POST /api/query/cancel
+ * Body: { connectionId?, requestId }
+ * Explicit Cancel from the UI. Idempotent — a missing/finished requestId is a
+ * no-op. The kill runs on the pool captured in the registry, so this works even
+ * if the user has navigated away from the originating tab/table.
+ */
+router.post('/cancel', async (req, res) => {
+  const requestId = normalizeRequestId(req.body?.requestId);
+  if (!requestId) {
+    return res.status(400).json({ error: 'requestId is required', ok: false });
+  }
+  const killed = await activeQueries.cancel(requestId);
+  res.json({ ok: true, killed });
 });
 
 module.exports = router;

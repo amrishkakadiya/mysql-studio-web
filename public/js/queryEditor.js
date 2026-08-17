@@ -12,6 +12,9 @@ window.MysqlClientQueryEditor = {
   loadedKey: null,
   syncing: false,
   nextLocalId: 1,
+  // In-flight fetches keyed by tab id (and `${tabId}:more` for lazy pages).
+  // Kept off the Alpine-reactive state so AbortController isn't proxied.
+  inflight: new Map(),
 
   blankQueryTab(overrides = {}) {
     const id = overrides.id ?? `local-${this.nextLocalId++}`;
@@ -27,6 +30,7 @@ window.MysqlClientQueryEditor = {
       result: null,
       error: null,
       running: false,
+      cancelling: false,
       durationMs: null,
       // Server-side lazy pages when the query has no manual LIMIT.
       resultBaseSql: null,
@@ -235,7 +239,9 @@ window.MysqlClientQueryEditor = {
     tabLabel(tab) {
       if (!tab) return '';
       const name = tab.title || 'Untitled';
-      return this.tabIsDirty(tab) ? `${name} •` : name;
+      const marked = this.tabIsDirty(tab) ? `${name} •` : name;
+      // Surface background-running queries on non-active tabs.
+      return tab.running ? `${marked} ⏳` : marked;
     },
 
     /** Accent query tabs with the active connection theme_color. */
@@ -478,6 +484,9 @@ window.MysqlClientQueryEditor = {
         if (!ok) return;
       }
 
+      // Closing a tab releases any query it still has running.
+      if (tab.running) void this.cancelSql(tab);
+
       tabs.splice(idx, 1);
       if (tabs.length === 0) {
         const blank = window.MysqlClientQueryEditor.blankQueryTab({ title: 'Untitled' });
@@ -628,6 +637,11 @@ window.MysqlClientQueryEditor = {
       if (tab.resultLoadingMore || tab.running || !this.queryResultHasMore()) return;
 
       tab.resultLoadingMore = true;
+      const mod = window.MysqlClientQueryEditor;
+      const moreKey = `${tab.id}:more`;
+      const requestId = this.newRequestId();
+      const controller = new AbortController();
+      mod.inflight.set(moreKey, { controller, requestId, connectionId: session.connection.id });
       try {
         const offset = Array.isArray(tab.result.rows) ? tab.result.rows.length : 0;
         const data = await this.api('POST', '/api/query/execute', {
@@ -636,7 +650,8 @@ window.MysqlClientQueryEditor = {
           sql: tab.resultBaseSql,
           offset,
           limit: this.resultPageSize(),
-        });
+          requestId,
+        }, { signal: controller.signal });
         if (data.kind !== 'rows') {
           tab.result.hasMore = false;
           return;
@@ -651,9 +666,15 @@ window.MysqlClientQueryEditor = {
         tab.result.sql = data.sql || tab.result.sql;
         tab.durationMs = data.durationMs ?? tab.durationMs;
       } catch (err) {
-        tab.result.hasMore = false;
-        this.toast(err.message || 'Failed to load more rows', 'error');
+        if (err.name === 'AbortError' || err.cancelled) {
+          tab.result.hasMore = false;
+        } else {
+          tab.result.hasMore = false;
+          this.toast(err.message || 'Failed to load more rows', 'error');
+        }
       } finally {
+        const current = mod.inflight.get(moreKey);
+        if (current && current.requestId === requestId) mod.inflight.delete(moreKey);
         tab.resultLoadingMore = false;
       }
     },
@@ -736,9 +757,18 @@ window.MysqlClientQueryEditor = {
       }
 
       tab.running = true;
+      tab.cancelling = false;
       tab.error = null;
       tab.resultBaseSql = null;
       tab.resultLoadingMore = false;
+
+      // Correlate the fetch with the server-side query so it can be killed.
+      // Ownership: results always land on the captured `tab`, even if the user
+      // switches tabs/sessions while the query runs.
+      const requestId = this.newRequestId();
+      const controller = new AbortController();
+      mod.inflight.set(tab.id, { controller, requestId, connectionId: session.connection.id });
+
       try {
         const pageLimit =
           Number(session.connection?.row_limit) > 0
@@ -750,7 +780,8 @@ window.MysqlClientQueryEditor = {
           sql: picked.sql,
           offset: 0,
           limit: pageLimit,
-        });
+          requestId,
+        }, { signal: controller.signal });
         tab.result = data;
         tab.durationMs = data.durationMs ?? null;
         // Keep the original statement so scroll can request OFFSET pages.
@@ -761,13 +792,56 @@ window.MysqlClientQueryEditor = {
           this.toast(`OK · ${affected} row(s) affected`, 'success');
         }
       } catch (err) {
-        tab.error = err.message || 'Query failed';
-        tab.result = null;
-        tab.resultBaseSql = null;
-        this.toast(tab.error, 'error');
+        if (err.name === 'AbortError' || err.cancelled) {
+          // User cancelled — leave any prior result untouched, no red error.
+          tab.error = null;
+        } else {
+          tab.error = err.message || 'Query failed';
+          tab.result = null;
+          tab.resultBaseSql = null;
+          this.toast(tab.error, 'error');
+        }
       } finally {
+        const current = mod.inflight.get(tab.id);
+        if (current && current.requestId === requestId) mod.inflight.delete(tab.id);
         tab.running = false;
+        tab.cancelling = false;
       }
+    },
+
+    /** Abort every in-flight query for a connection (on disconnect). */
+    abortSessionQueries(connectionId) {
+      const mod = window.MysqlClientQueryEditor;
+      const id = Number(connectionId);
+      for (const [k, entry] of mod.inflight) {
+        if (entry.connectionId === id) {
+          try { entry.controller.abort(); } catch (_) { /* settled */ }
+          mod.inflight.delete(k);
+        }
+      }
+    },
+
+    /** Abort a running query on `tab` (defaults to the active tab). */
+    async cancelSql(tab) {
+      tab = tab || this.activeQueryTab();
+      if (!tab || !tab.running) return;
+      const mod = window.MysqlClientQueryEditor;
+      const main = mod.inflight.get(tab.id);
+      const more = mod.inflight.get(`${tab.id}:more`);
+      if (!main && !more) return;
+
+      tab.cancelling = true;
+      for (const entry of [main, more]) {
+        if (!entry) continue;
+        try { entry.controller.abort(); } catch (_) { /* already settled */ }
+        try {
+          await this.api('POST', '/api/query/cancel', {
+            connectionId: entry.connectionId,
+            requestId: entry.requestId,
+          });
+        } catch (_) { /* best-effort kill */ }
+      }
+      this.toast('Query cancelled', 'info');
     },
   },
 };

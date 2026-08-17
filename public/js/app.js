@@ -296,7 +296,7 @@ window.mysqlClient = function mysqlClient() {
       localStorage.setItem(STORAGE_EXPLORER, this.explorerCollapsed ? '1' : '0');
     },
 
-    async api(method, url, body) {
+    async api(method, url, body, { signal } = {}) {
       const options = {
         method,
         headers: { Accept: 'application/json' },
@@ -305,12 +305,22 @@ window.mysqlClient = function mysqlClient() {
         options.headers['Content-Type'] = 'application/json';
         options.body = JSON.stringify(body);
       }
+      if (signal) options.signal = signal;
       const res = await fetch(url, options);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || data.message || `Request failed (${res.status})`);
+        // Server-reported cancellation carries a flag so callers can stay quiet.
+        const err = new Error(data.error || data.message || `Request failed (${res.status})`);
+        if (data.cancelled) err.cancelled = true;
+        throw err;
       }
       return data;
+    },
+
+    /** RFC4122-ish id for correlating a fetch with its server-side query. */
+    newRequestId() {
+      if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+      return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     },
 
     toast(message, type = 'info', options = {}) {
@@ -365,9 +375,6 @@ window.mysqlClient = function mysqlClient() {
       } catch (_) {
         savedDbs = {};
       }
-      const blankView =
-        (window.MysqlClientTableGrid && window.MysqlClientTableGrid.blankTableView) ||
-        (() => null);
       const editor =
         window.MysqlClientQueryEditor || {
           initialTabs: () => [{ id: 'local-1', title: 'Untitled', sql: '', fileId: null }],
@@ -380,7 +387,10 @@ window.mysqlClient = function mysqlClient() {
         viewMode: 'table',
         queryTabs: tabs,
         activeTabId: tabs[0]?.id || 'local-1',
-        tableView: blankView(),
+        // Bounded per-table cache so switching tables keeps in-flight loads
+        // alive without leaking rows. See public/js/tableGrid.js.
+        tableViews: {},
+        activeTableKey: null,
       };
     },
 
@@ -503,6 +513,9 @@ window.mysqlClient = function mysqlClient() {
 
     async disconnectSession(connectionId) {
       const id = Number(connectionId);
+      // Stop any in-flight queries/table loads before the pool goes away.
+      this.abortSessionQueries?.(id);
+      this.abortSessionTableLoads?.(id);
       try {
         await this.api('POST', `/api/connections/${id}/disconnect`);
       } catch (err) {
@@ -795,6 +808,8 @@ window.mysqlClient = function mysqlClient() {
       if (!id) return;
       try {
         if (this.isOpen(id)) {
+          this.abortSessionQueries?.(id);
+          this.abortSessionTableLoads?.(id);
           try {
             await this.api('POST', `/api/connections/${id}/disconnect`);
           } catch (_) {
